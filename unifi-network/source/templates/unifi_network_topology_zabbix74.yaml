@@ -1,0 +1,117 @@
+zabbix_export:
+  version: '7.4'
+  template_groups:
+  - uuid: c2103f36d6e844049d89ce4a0a34dd26
+    name: Templates/UniFi Topology
+  templates:
+  - uuid: dce62fc5d72144028ac50926dff3e713
+    template: UniFi Network Topology
+    name: UniFi Network Topology
+    description: Standalone, read-only UniFi topology collection for site default.
+      Link alongside the existing UniFi Network API template on the controller host.
+      Uses existing host macros; does not define or override them. No discovery, device
+      changes or map creation. TLS certificate and hostname verification are enabled.
+    groups:
+    - name: Templates/UniFi Topology
+    items:
+    - uuid: 23aece8c321342229e0a72077fd21248
+      name: 'UniFi topology: Raw JSON'
+      type: HTTP_AGENT
+      key: unifi.topology.json
+      delay: 1m
+      history: 1d
+      value_type: TEXT
+      trends: '0'
+      description: Read-only topology for site default. Uses existing host macros.
+        Internal UniFi endpoint; response schema may change.
+      timeout: 15s
+      url: https://{$UNIFI_NETWORK_API_ADDRESS}/proxy/network/v2/api/site/default/topology
+      status_codes: '200'
+      follow_redirects: 'NO'
+      headers:
+      - name: X-API-Key
+        value: '{$UNIFI_NETWORK_API_KEY}'
+      retrieve_mode: BODY
+      request_method: GET
+      output_format: RAW
+      verify_peer: 'YES'
+      verify_host: 'YES'
+      tags:
+      - tag: component
+        value: topology
+    - uuid: 70dd8ac306c342ce8ff4afd5186d8c33
+      name: 'UniFi topology: vertices JSON'
+      type: DEPENDENT
+      key: unifi.topology.vertices
+      delay: '0'
+      history: 1d
+      value_type: TEXT
+      trends: '0'
+      description: Complete vertices array from the topology response.
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.vertices
+      master_item:
+        key: unifi.topology.json
+      tags:
+      - tag: component
+        value: topology
+    - uuid: 2bc057c0dcb04aeabc120409f5391394
+      name: 'UniFi topology: vertices count'
+      type: DEPENDENT
+      key: unifi.topology.vertices.count
+      delay: '0'
+      history: 30d
+      value_type: UNSIGNED
+      trends: 365d
+      description: Number of entries in vertices; includes all types returned by UniFi.
+        Not an online/health indicator. Missing or invalid data is not replaced by
+        zero.
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.vertices.length()
+      master_item:
+        key: unifi.topology.json
+      tags:
+      - tag: component
+        value: topology
+    - uuid: 3e5d2805017c4fe89911580fe6320c8e
+      name: 'UniFi topology: edges JSON'
+      type: DEPENDENT
+      key: unifi.topology.edges
+      delay: '0'
+      history: 1d
+      value_type: TEXT
+      trends: '0'
+      description: Complete edges array from the topology response.
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.edges
+      master_item:
+        key: unifi.topology.json
+      tags:
+      - tag: component
+        value: topology
+    - uuid: 3d942b05284e483c9fa13e8ff7555478
+      name: 'UniFi topology: edges count'
+      type: DEPENDENT
+      key: unifi.topology.edges.count
+      delay: '0'
+      history: 30d
+      value_type: UNSIGNED
+      trends: 365d
+      description: Number of entries in edges; includes all types returned by UniFi.
+        Not an online/health indicator. Missing or invalid data is not replaced by
+        zero.
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.edges.length()
+      master_item:
+        key: unifi.topology.json
+      tags:
+      - tag: component
+        value: topology

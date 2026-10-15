@@ -1,0 +1,30 @@
+{
+  "manifest_version": 2,
+  "id": "unifi_topology",
+  "type": "widget",
+  "name": "UniFi Topologie",
+  "namespace": "UniFiTopology",
+  "version": "0.2.0",
+  "author": "Local extension",
+  "description": "Read-only UniFi topology with expandable endpoints and Zabbix problem severity.",
+  "widget": {
+    "size": {
+      "width": 24,
+      "height": 9
+    },
+    "js_class": "CWidgetUniFiTopology"
+  },
+  "actions": {
+    "widget.unifi_topology.view": {
+      "class": "WidgetView"
+    }
+  },
+  "assets": {
+    "js": [
+      "class.widget.js"
+    ],
+    "css": [
+      "widget.css"
+    ]
+  }
+}
