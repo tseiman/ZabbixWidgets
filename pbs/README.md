@@ -7,6 +7,7 @@ This directory contains the unmodified **PBS Dashboard 1.0.5** source package. T
 ## Contents
 
 - [Features](#features)
+- [Screenshot](#screenshot)
 - [Requirements](#requirements)
 - [Repository layout](#repository-layout)
 - [Installation](#installation)
@@ -32,6 +33,14 @@ Task Summary, Task List, Longest Tasks, and Running Tasks can open PBS task logs
 
 The extended template collects completed tasks every five minutes and running tasks every minute. Completed tasks are distributed across 16 dependent text items and retained for 90 days by the supplied template.
 
+## Screenshot
+
+<a href="assets/pbs-dashboard-overview.png">
+  <img src="assets/pbs-dashboard-overview.png" alt="PBS Task Summary, Longest Tasks, Running Tasks, Task List, and Datastore Usage widgets on a Zabbix dashboard" width="760">
+</a>
+
+*Example dashboard containing all five PBS widgets. Select the image to open it at full resolution.*
+
 ## Requirements
 
 - Zabbix frontend compatible with the included Zabbix 7.4 template and manifest version 2.0 modules.
@@ -50,6 +59,7 @@ If the Zabbix server, proxy, and frontend run on different systems or in differe
 ```text
 pbs/
 ├── README.md                 # This project-specific guide
+├── assets/                   # README screenshots
 └── source/                   # Unmodified PBS Dashboard 1.0.5 package
     ├── collector/            # Zabbix JavaScript task collectors
     ├── config/               # Direct-log connection example
