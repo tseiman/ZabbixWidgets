@@ -1,0 +1,39 @@
+{
+  "manifest_version": 2.0,
+  "id": "pbs_longest",
+  "type": "widget",
+  "name": "PBS Longest Tasks",
+  "namespace": "PbsLongest",
+  "version": "1.0.5",
+  "author": "PBS Dashboard",
+  "description": "PBS panel using Zabbix items and history.",
+  "widget": {
+    "js_class": "CWidgetPbsLongest",
+    "size": {
+      "width": 36,
+      "height": 5
+    },
+    "in": {
+      "time_period": {
+        "type": "_timeperiod"
+      }
+    }
+  },
+  "actions": {
+    "widget.pbs_longest.view": {
+      "class": "WidgetView"
+    },
+    "widget.pbs_longest.log": {
+      "class": "TaskLog",
+      "layout": "layout.json"
+    }
+  },
+  "assets": {
+    "css": [
+      "pbs.css"
+    ],
+    "js": [
+      "class.widget.js"
+    ]
+  }
+}

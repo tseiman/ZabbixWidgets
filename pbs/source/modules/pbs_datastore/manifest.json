@@ -1,0 +1,35 @@
+{
+  "manifest_version": 2.0,
+  "id": "pbs_datastore",
+  "type": "widget",
+  "name": "PBS Datastore Usage",
+  "namespace": "PbsDatastore",
+  "version": "1.0.5",
+  "author": "PBS Dashboard",
+  "description": "PBS panel using Zabbix items and history.",
+  "widget": {
+    "js_class": "CWidgetPbsDatastore",
+    "size": {
+      "width": 36,
+      "height": 5
+    },
+    "in": {
+      "time_period": {
+        "type": "_timeperiod"
+      }
+    }
+  },
+  "actions": {
+    "widget.pbs_datastore.view": {
+      "class": "WidgetView"
+    }
+  },
+  "assets": {
+    "css": [
+      "pbs.css"
+    ],
+    "js": [
+      "class.widget.js"
+    ]
+  }
+}

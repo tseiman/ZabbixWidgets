@@ -1,0 +1,39 @@
+{
+  "manifest_version": 2.0,
+  "id": "pbs_summary",
+  "type": "widget",
+  "name": "PBS Task Summary",
+  "namespace": "PbsSummary",
+  "version": "1.0.5",
+  "author": "PBS Dashboard",
+  "description": "PBS panel using Zabbix items and history.",
+  "widget": {
+    "js_class": "CWidgetPbsSummary",
+    "size": {
+      "width": 36,
+      "height": 5
+    },
+    "in": {
+      "time_period": {
+        "type": "_timeperiod"
+      }
+    }
+  },
+  "actions": {
+    "widget.pbs_summary.view": {
+      "class": "WidgetView"
+    },
+    "widget.pbs_summary.log": {
+      "class": "TaskLog",
+      "layout": "layout.json"
+    }
+  },
+  "assets": {
+    "css": [
+      "pbs.css"
+    ],
+    "js": [
+      "class.widget.js"
+    ]
+  }
+}

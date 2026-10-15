@@ -1,0 +1,1559 @@
+zabbix_export:
+  version: '7.4'
+  template_groups:
+  - uuid: a571c0d144b14fd4a87a9d9b2aa9fcd6
+    name: Templates/Applications
+  templates:
+  - uuid: 8e155e663e5c4a3f93a765d6c30b70cd
+    template: Proxmox Backup Server by HTTP
+    name: Proxmox Backup Server by HTTP
+    description: 'Template for monitoring Proxmox Backup Server (PBS) via its HTTP API.
+
+
+      It collects datastore usage, disk health and wearout, failed task
+
+      information and per-backup-group snapshot freshness across all
+
+      namespaces through the PBS REST API, and discovers datastores, disks
+
+      and backup groups via low-level discovery.
+
+
+      Setup:
+
+      Create a monitoring user and an API token with at least the "Audit" role
+
+      on path "/", then set the {$PBS.HOST}, {$PBS.TOKEN.ID} and
+
+      {$PBS.TOKEN.SECRET} macros on the host.
+
+
+      API documentation: https://pbs.proxmox.com/docs/api-viewer/index.html
+
+
+      Template author: nikosch86
+
+      Source and issue tracker: https://github.com/nikosch86/zabbix-proxmox-backup-server
+
+      '
+    groups:
+    - name: Templates/Applications
+    items:
+    - uuid: 0449b6e2a6ae4e40860479b234035718
+      name: 'PBS: API service status'
+      type: SCRIPT
+      key: pbs.api.available
+      delay: 5m
+      history: 7d
+      params: "try {\n  var params = JSON.parse(value);\n  var req = new HttpRequest();\n  req.addHeader('Authorization: PBSAPIToken='\
+        \ + params.token + ':' + params.secret);\n  req.get(encodeURI('https://' + params.host + ':' + params.port + '/api2/json/version'));\n\
+        } catch (error) {\n    Zabbix.log(3, \"Proxmox Backup Server API failed: \" + params.host + \" Error: \" + error);\n\
+        \    if (!Number.isInteger(error))\n        return 520;\n}\nreturn req.getStatus();\n"
+      description: Get API service status.
+      valuemap:
+        name: HTTP response status code
+      preprocessing:
+      - type: DISCARD_UNCHANGED_HEARTBEAT
+        parameters:
+        - 12h
+      timeout: 10s
+      parameters:
+      - name: host
+        value: '{$PBS.HOST}'
+      - name: port
+        value: '{$PBS.PORT}'
+      - name: secret
+        value: '{$PBS.TOKEN.SECRET}'
+      - name: token
+        value: '{$PBS.TOKEN.ID}'
+      tags:
+      - tag: component
+        value: health
+      triggers:
+      - uuid: c824c9e2069b4566b4c0d41d5ae7266e
+        expression: last(/Proxmox Backup Server by HTTP/pbs.api.available)<>200
+        name: 'PBS: API service not available'
+        priority: HIGH
+        description: The API service is not available. Check the network connection, the PBS service status and the API token
+          authorization settings.
+    - uuid: 430dbc8869df4f5a9083055812c4c85a
+      name: 'PBS: Get backup groups'
+      type: SCRIPT
+      key: pbs.backupgroups
+      delay: '{$PBS.SNAPSHOT.INTERVAL}'
+      history: 1d
+      value_type: TEXT
+      params: "var params = JSON.parse(value);\nvar base = 'https://' + params.host + ':' + params.port + '/api2/json';\n\
+        var req = new HttpRequest();\nreq.addHeader('Authorization: PBSAPIToken=' + params.token + ':' + params.secret);\n\
+        \nvar resp = req.get(encodeURI(base + '/status/datastore-usage'));\nif (req.getStatus() !== 200) {\n    throw 'Failed\
+        \ to list datastores: HTTP status ' + req.getStatus();\n}\n\nfunction nsSuffix(ns) {\n    return ns ? '/' + ns : '';\n\
+        }\n\nvar result = [];\n(JSON.parse(resp).data || []).forEach(function (store) {\n    if (store.error) {\n        return;\n\
+        \    }\n\n    // Enumerate namespaces recursively. Root (empty string) is always\n    // included; sub-namespaces\
+        \ come from the namespace endpoint. If the\n    // endpoint is unavailable (older PBS or a permission issue) the\n\
+        \    // template falls back to monitoring the root namespace only.\n    var namespaces = [''];\n    try {\n      \
+        \  var nsResp = req.get(encodeURI(base + '/admin/datastore/' + store.store + '/namespace'));\n        if (req.getStatus()\
+        \ === 200) {\n            (JSON.parse(nsResp).data || []).forEach(function (item) {\n                if (item.ns &&\
+        \ namespaces.indexOf(item.ns) === -1) {\n                    namespaces.push(item.ns);\n                }\n      \
+        \      });\n        } else {\n            Zabbix.log(4, 'PBS namespace list failed for datastore ' + store.store +\
+        \ ': HTTP status ' + req.getStatus() + ' (monitoring root namespace only)');\n        }\n    } catch (error) {\n \
+        \       Zabbix.log(4, 'PBS namespace enumeration error for datastore ' + store.store + ': ' + error + ' (monitoring\
+        \ root namespace only)');\n    }\n\n    namespaces.forEach(function (ns) {\n        var groupUrl = encodeURI(base\
+        \ + '/admin/datastore/' + store.store + '/groups');\n        if (ns) {\n            groupUrl += '?ns=' + encodeURIComponent(ns);\n\
+        \        }\n        var groupResp = req.get(groupUrl);\n        if (req.getStatus() !== 200) {\n            Zabbix.log(3,\
+        \ 'PBS group list failed for datastore ' + store.store + ' namespace \"' + ns + '\": HTTP status ' + req.getStatus());\n\
+        \            return;\n        }\n        (JSON.parse(groupResp).data || []).forEach(function (group) {\n         \
+        \   if (!(group['last-backup'] > 0)) {\n                return;\n            }\n            result.push({\n      \
+        \          datastore: store.store,\n                ns: ns,\n                ns_suffix: nsSuffix(ns),\n          \
+        \      group: group['backup-type'] + '/' + group['backup-id'],\n                type: group['backup-type'],\n    \
+        \            id: group['backup-id'],\n                last: group['last-backup'],\n                comment: group.comment\
+        \ || ''\n            });\n        });\n    });\n});\nreturn JSON.stringify(result);\n"
+      description: 'Backup groups and their latest snapshot time (last-backup), across all
+
+        datastores and all namespaces, from the per-datastore groups endpoint.
+
+        Namespaces are enumerated recursively via the namespace endpoint; the
+
+        root namespace is always included. One entry per backup group is stored
+
+        per poll, including the namespace and the group comment so that freshness
+
+        alerting can be suppressed for intentionally-retained groups (for example
+
+        the leftover backups of a VM/CT that was deleted at the source). Datastores
+
+        that report an error or cannot be queried are skipped; their freshness
+
+        items keep their last known value until the datastore recovers (the
+
+        datastore error trigger covers that condition).
+
+        '
+      timeout: 30s
+      parameters:
+      - name: host
+        value: '{$PBS.HOST}'
+      - name: port
+        value: '{$PBS.PORT}'
+      - name: secret
+        value: '{$PBS.TOKEN.SECRET}'
+      - name: token
+        value: '{$PBS.TOKEN.ID}'
+      tags:
+      - tag: component
+        value: raw
+    - uuid: ddea6e9d77c04fedb237d1bf72d22778
+      name: 'PBS: Get datastore status'
+      type: HTTP_AGENT
+      key: pbs.datastore.status
+      delay: 5m
+      history: 7d
+      value_type: TEXT
+      description: Get datastore status.
+      preprocessing:
+      - type: CHECK_NOT_SUPPORTED
+        parameters:
+        - '-1'
+        error_handler: CUSTOM_VALUE
+        error_handler_params: Error getting data
+      - type: JSONPATH
+        parameters:
+        - $.body.data
+      timeout: 10s
+      url: https://{$PBS.HOST}:{$PBS.PORT}/api2/json/status/datastore-usage
+      headers:
+      - name: Authorization
+        value: PBSAPIToken={$PBS.TOKEN.ID}:{$PBS.TOKEN.SECRET}
+      output_format: JSON
+      verify_peer: 'YES'
+      verify_host: 'YES'
+      tags:
+      - tag: component
+        value: raw
+    - uuid: 83c76592aedf4833a63393b5e7b54fb9
+      name: 'PBS: Get disks'
+      type: HTTP_AGENT
+      key: pbs.disks
+      delay: 5m
+      history: 7d
+      value_type: TEXT
+      description: Get disks.
+      preprocessing:
+      - type: CHECK_NOT_SUPPORTED
+        parameters:
+        - '-1'
+        error_handler: CUSTOM_VALUE
+        error_handler_params: Error getting data
+      - type: JSONPATH
+        parameters:
+        - $.body.data
+      timeout: 10s
+      url: https://{$PBS.HOST}:{$PBS.PORT}/api2/json/nodes/localhost/disks/list
+      headers:
+      - name: Authorization
+        value: PBSAPIToken={$PBS.TOKEN.ID}:{$PBS.TOKEN.SECRET}
+      output_format: JSON
+      verify_peer: 'YES'
+      verify_host: 'YES'
+      tags:
+      - tag: component
+        value: raw
+    - uuid: 17e7c9ee749946aaaf19ae4f1148f0d1
+      name: 'PBS: Get failed tasks'
+      type: SCRIPT
+      key: pbs.tasks.error
+      delay: 5m
+      history: 7d
+      value_type: TEXT
+      params: "var p = JSON.parse(value);\nvar req = new HttpRequest();\nreq.addHeader('Authorization: PBSAPIToken=' + p.token\
+        \ + ':' + p.secret);\n\nvar base = 'https://' + p.host + ':' + p.port + '/api2/json';\nvar days = Number('{$PBS.TASKS.DAYS}');\n\
+        if (!isFinite(days) || days <= 0) { throw 'Invalid PBS.TASKS.DAYS'; }\nvar since = Math.floor(Date.now() / 1000) -\
+        \ days * 86400;\n\nfunction get(path) {\n    var response = req.get(base + path);\n    if (req.getStatus() !== 200)\
+        \ { throw 'PBS task query failed: HTTP ' + req.getStatus(); }\n    var data = JSON.parse(response).data;\n    if (data\
+        \ === undefined || data === null) { throw 'Missing task data'; }\n    return data;\n}\n\nfunction taskList(query)\
+        \ {\n    var result = [];\n    for (var page = 0; page < 100; page++) {\n        var batch = get('/nodes/0/tasks?running=false&since='\
+        \ + since + '&limit=100&start=' + page * 100 + query);\n        if (!Array.isArray(batch)) { throw 'Invalid task response';\
+        \ }\n        result = result.concat(batch);\n        if (batch.length < 100) { return result; }\n    }\n    throw\
+        \ 'Incomplete task history';\n}\n\nvar failures = taskList('&errors=true&statusfilter=error&statusfilter=warning');\n\
+        var updates = taskList('&typefilter=aptupdate');\nvar backups = taskList('&typefilter=backup');\nvar completed = updates.concat(backups);\n\
+        \nfailures = failures.filter(function(task) {\n    if (task.starttime < since || task.status === 'OK') { return false;\
+        \ }\n    if (task.worker_type !== 'aptupdate' && task.worker_type !== 'backup') { return true; }\n\n    // Ohne Backup-Kennung\
+        \ keine automatische Entwarnung.\n    if (task.worker_type === 'backup' && !task.worker_id) { return true; }\n\n \
+        \   return !completed.some(function(done) {\n        return done.worker_type === task.worker_type &&\n           \
+        \ done.status === 'OK' &&\n            done.endtime > 0 &&\n            done.starttime > (task.endtime || task.starttime)\
+        \ &&\n            done.node === task.node &&\n            (done.worker_id || '') === (task.worker_id || '');\n   \
+        \ });\n});\n\nreturn JSON.stringify(failures);\n"
+      description: 'Failed tasks within PBS.TASKS.DAYS. Only aptupdate warnings/errors are superseded by a later completed
+        successful aptupdate on the same node and worker. All backup, verify, prune, GC, sync and other errors retain the
+        full lookback. Paginated task queries; incomplete/API failures do not yield an empty healthy list. Local customization:
+        TS aptupdate recovery.'
+      timeout: 30s
+      parameters:
+      - name: host
+        value: '{$PBS.HOST}'
+      - name: port
+        value: '{$PBS.PORT}'
+      - name: secret
+        value: '{$PBS.TOKEN.SECRET}'
+      - name: token
+        value: '{$PBS.TOKEN.ID}'
+      tags:
+      - tag: component
+        value: raw
+    - uuid: 2c1882c1b4ad475e961922283a62ef2a
+      name: 'PBS: Failed other tasks'
+      type: DEPENDENT
+      key: pbs.tasks.error.other
+      history: 7d
+      value_type: TEXT
+      description: Failed tasks within the last {$PBS.TASKS.DAYS} days whose worker type is not covered by the per-worktype
+        items (backup, garbage collection, prune, sync, verify).
+      preprocessing:
+      - type: JAVASCRIPT
+        parameters:
+        - "var prefixes = ['backup', 'garbage_collection', 'prune', 'sync', 'verif', 'termproxy'];\nvar result = [];\nvar\
+          \ tasks = JSON.parse(value);\nif (tasks instanceof Array) {\n    tasks.forEach(function (task) {\n        var type\
+          \ = String(task.worker_type || '');\n        var matched = false;\n        for (var i = 0; i < prefixes.length;\
+          \ i++) {\n            if (type.indexOf(prefixes[i]) === 0) {\n                matched = true;\n                break;\n\
+          \            }\n        }\n        if (!matched) {\n            result.push(task);\n        }\n    });\n}\nreturn\
+          \ JSON.stringify(result);\n"
+      master_item:
+        key: pbs.tasks.error
+      tags:
+      - tag: component
+        value: tasks
+      triggers:
+      - uuid: c445dde077474ebd95939a71ee703605
+        expression: last(/Proxmox Backup Server by HTTP/pbs.tasks.error.other)<>"[]"
+        recovery_mode: RECOVERY_EXPRESSION
+        recovery_expression: last(/Proxmox Backup Server by HTTP/pbs.tasks.error.other)="[]"
+        name: 'PBS: Failed tasks found'
+        opdata: '{ITEM.VALUE}'
+        priority: HIGH
+        description: Failed tasks occured within the last {$PBS.TASKS.DAYS} days. Catch-all for worker types not covered by
+          the per-worktype triggers (backup, garbage collection, prune, sync, verify).
+        manual_close: 'YES'
+        dependencies:
+        - name: 'PBS: API service not available'
+          expression: last(/Proxmox Backup Server by HTTP/pbs.api.available)<>200
+    - uuid: b1e3da2de2ae416393f0ea3cfdd1136b
+      name: 'PBS: Failed backup tasks'
+      type: DEPENDENT
+      key: pbs.tasks.error.worktype[backup]
+      history: 7d
+      value_type: TEXT
+      description: Failed backup tasks (worker type prefix "backup") within the last {$PBS.TASKS.DAYS} days.
+      preprocessing:
+      - type: JAVASCRIPT
+        parameters:
+        - "var result = [];\nvar tasks = JSON.parse(value);\nif (tasks instanceof Array) {\n    tasks.forEach(function (task)\
+          \ {\n        if (String(task.worker_type || '').indexOf('backup') === 0) {\n            result.push(task);\n   \
+          \     }\n    });\n}\nreturn JSON.stringify(result);\n"
+      master_item:
+        key: pbs.tasks.error
+      tags:
+      - tag: component
+        value: tasks
+      - tag: worktype
+        value: backup
+      triggers:
+      - uuid: ea855b13f3844b65ab0c9cf1839b56dd
+        expression: last(/Proxmox Backup Server by HTTP/pbs.tasks.error.worktype[backup])<>"[]"
+        recovery_mode: RECOVERY_EXPRESSION
+        recovery_expression: last(/Proxmox Backup Server by HTTP/pbs.tasks.error.worktype[backup])="[]"
+        name: 'PBS: Failed backup tasks found'
+        opdata: '{ITEM.VALUE}'
+        priority: HIGH
+        description: Backup tasks failed within the last {$PBS.TASKS.DAYS} days. A client backup did not complete.
+        dependencies:
+        - name: 'PBS: API service not available'
+          expression: last(/Proxmox Backup Server by HTTP/pbs.api.available)<>200
+    - uuid: 10206f1f7fce424ba918989057915596
+      name: 'PBS: Failed garbage collection tasks'
+      type: DEPENDENT
+      key: pbs.tasks.error.worktype[garbage_collection]
+      history: 7d
+      value_type: TEXT
+      description: Failed garbage collection tasks (worker type prefix "garbage_collection") within the last {$PBS.TASKS.DAYS}
+        days.
+      preprocessing:
+      - type: JAVASCRIPT
+        parameters:
+        - "var result = [];\nvar tasks = JSON.parse(value);\nif (tasks instanceof Array) {\n    tasks.forEach(function (task)\
+          \ {\n        if (String(task.worker_type || '').indexOf('garbage_collection') === 0) {\n            result.push(task);\n\
+          \        }\n    });\n}\nreturn JSON.stringify(result);\n"
+      master_item:
+        key: pbs.tasks.error
+      tags:
+      - tag: component
+        value: tasks
+      - tag: worktype
+        value: garbage_collection
+      triggers:
+      - uuid: b70d0d49346348e2be5e947c8a210ac7
+        expression: last(/Proxmox Backup Server by HTTP/pbs.tasks.error.worktype[garbage_collection])<>"[]"
+        recovery_mode: RECOVERY_EXPRESSION
+        recovery_expression: last(/Proxmox Backup Server by HTTP/pbs.tasks.error.worktype[garbage_collection])="[]"
+        name: 'PBS: Failed garbage collection tasks found'
+        opdata: '{ITEM.VALUE}'
+        priority: AVERAGE
+        description: Garbage collection tasks failed within the last {$PBS.TASKS.DAYS} days. Unused chunks are not being reclaimed.
+        dependencies:
+        - name: 'PBS: API service not available'
+          expression: last(/Proxmox Backup Server by HTTP/pbs.api.available)<>200
+    - uuid: e41476ecb438420ca881d07b0e372264
+      name: 'PBS: Failed prune tasks'
+      type: DEPENDENT
+      key: pbs.tasks.error.worktype[prune]
+      history: 7d
+      value_type: TEXT
+      description: Failed prune tasks (worker type prefix "prune", covering manual and scheduled prune jobs) within the last
+        {$PBS.TASKS.DAYS} days.
+      preprocessing:
+      - type: JAVASCRIPT
+        parameters:
+        - "var result = [];\nvar tasks = JSON.parse(value);\nif (tasks instanceof Array) {\n    tasks.forEach(function (task)\
+          \ {\n        if (String(task.worker_type || '').indexOf('prune') === 0) {\n            result.push(task);\n    \
+          \    }\n    });\n}\nreturn JSON.stringify(result);\n"
+      master_item:
+        key: pbs.tasks.error
+      tags:
+      - tag: component
+        value: tasks
+      - tag: worktype
+        value: prune
+      triggers:
+      - uuid: 7b410796efa04dbb9a92ea6e67ef802c
+        expression: last(/Proxmox Backup Server by HTTP/pbs.tasks.error.worktype[prune])<>"[]"
+        recovery_mode: RECOVERY_EXPRESSION
+        recovery_expression: last(/Proxmox Backup Server by HTTP/pbs.tasks.error.worktype[prune])="[]"
+        name: 'PBS: Failed prune tasks found'
+        opdata: '{ITEM.VALUE}'
+        priority: AVERAGE
+        description: Prune tasks failed within the last {$PBS.TASKS.DAYS} days. Old snapshots are not being cleaned up.
+        dependencies:
+        - name: 'PBS: API service not available'
+          expression: last(/Proxmox Backup Server by HTTP/pbs.api.available)<>200
+    - uuid: 564ce70f0e7844bd84c336c0ced22738
+      name: 'PBS: Failed sync tasks'
+      type: DEPENDENT
+      key: pbs.tasks.error.worktype[sync]
+      history: 7d
+      value_type: TEXT
+      description: Failed sync tasks (worker type prefix "sync", covering manual syncs and scheduled sync jobs) within the
+        last {$PBS.TASKS.DAYS} days.
+      preprocessing:
+      - type: JAVASCRIPT
+        parameters:
+        - "var result = [];\nvar tasks = JSON.parse(value);\nif (tasks instanceof Array) {\n    tasks.forEach(function (task)\
+          \ {\n        if (String(task.worker_type || '').indexOf('sync') === 0) {\n            result.push(task);\n     \
+          \   }\n    });\n}\nreturn JSON.stringify(result);\n"
+      master_item:
+        key: pbs.tasks.error
+      tags:
+      - tag: component
+        value: tasks
+      - tag: worktype
+        value: sync
+      triggers:
+      - uuid: 3f3b78733ec14fc9ae01516f43a7c55e
+        expression: last(/Proxmox Backup Server by HTTP/pbs.tasks.error.worktype[sync])<>"[]"
+        recovery_mode: RECOVERY_EXPRESSION
+        recovery_expression: last(/Proxmox Backup Server by HTTP/pbs.tasks.error.worktype[sync])="[]"
+        name: 'PBS: Failed sync tasks found'
+        opdata: '{ITEM.VALUE}'
+        priority: HIGH
+        description: Sync tasks failed within the last {$PBS.TASKS.DAYS} days. Off-site copies are not being replicated.
+        dependencies:
+        - name: 'PBS: API service not available'
+          expression: last(/Proxmox Backup Server by HTTP/pbs.api.available)<>200
+    - uuid: 9608bc608a024b5bb0c6d73ae5e09fab
+      name: 'PBS: Failed verify tasks'
+      type: DEPENDENT
+      key: pbs.tasks.error.worktype[verify]
+      history: 7d
+      value_type: TEXT
+      description: Failed verify tasks (worker type prefix "verif", covering manual verification and scheduled verification
+        jobs) within the last {$PBS.TASKS.DAYS} days.
+      preprocessing:
+      - type: JAVASCRIPT
+        parameters:
+        - "var result = [];\nvar tasks = JSON.parse(value);\nif (tasks instanceof Array) {\n    tasks.forEach(function (task)\
+          \ {\n        if (String(task.worker_type || '').indexOf('verif') === 0) {\n            result.push(task);\n    \
+          \    }\n    });\n}\nreturn JSON.stringify(result);\n"
+      master_item:
+        key: pbs.tasks.error
+      tags:
+      - tag: component
+        value: tasks
+      - tag: worktype
+        value: verify
+      triggers:
+      - uuid: b90f867121b24a5bb8f37c6cfbdb5fd1
+        expression: last(/Proxmox Backup Server by HTTP/pbs.tasks.error.worktype[verify])<>"[]"
+        recovery_mode: RECOVERY_EXPRESSION
+        recovery_expression: last(/Proxmox Backup Server by HTTP/pbs.tasks.error.worktype[verify])="[]"
+        name: 'PBS: Failed verify tasks found'
+        opdata: '{ITEM.VALUE}'
+        priority: AVERAGE
+        description: Verification tasks failed within the last {$PBS.TASKS.DAYS} days. Snapshot integrity is not confirmed.
+        dependencies:
+        - name: 'PBS: API service not available'
+          expression: last(/Proxmox Backup Server by HTTP/pbs.api.available)<>200
+    - uuid: 570c104740ae4454b85c5d6f0e93f19d
+      name: 'PBS dashboard: Collect completed tasks'
+      type: SCRIPT
+      key: pbs.dashboard.tasks.raw
+      delay: 5m
+      history: '0'
+      value_type: TEXT
+      params: "var p = JSON.parse(value);\nvar req = new HttpRequest();\nreq.addHeader('Authorization: PBSAPIToken=' + p.token\
+        \ + ':' + p.secret);\nvar base = 'https://' + p.host + ':' + p.port + '/api2/json';\nvar permissions = req.get(base\
+        \ + '/access/permissions?path=/system/tasks');\nif (req.getStatus() !== 200) { throw 'Cannot verify task audit permissions:\
+        \ HTTP ' + req.getStatus(); }\nvar acl = JSON.parse(permissions).data;\nif (!acl || !acl['/system/tasks'] || !Object.prototype.hasOwnProperty.call(acl['/system/tasks'],\
+        \ 'Sys.Audit')) { throw 'Sys.Audit on /system/tasks required; refusing partial per-user task list'; }\nvar now = Math.floor(Date.now()\
+        \ / 1000);\nvar hours = Number(p.lookback);\nif (!isFinite(hours) || hours < 1 || hours > 168) { throw 'Dashboard\
+        \ lookback must be 1..168 hours'; }\nvar since = now - hours * 3600;\n// No since filter: PBS also filters by START\
+        \ time, losing long-running jobs.\n// limit=0 is the documented unbounded list, avoiding moving offset pagination.\n\
+        var response = req.get(base + '/nodes/localhost/tasks?limit=0');\nif (req.getStatus() !== 200) { throw 'PBS task query:\
+        \ HTTP ' + req.getStatus(); }\nif (response.length > 8000000) { throw 'PBS task archive exceeds 8 MB; use an incremental\
+        \ collector'; }\nvar list = JSON.parse(response).data;\nif (!Array.isArray(list)) { throw 'Invalid task list'; }\n\
+        var shards = [];\nfor (var i = 0; i < 16; i++) { shards.push({version: 1, since: since, until: now, tasks: []}); }\n\
+        var seen = {};\nlist.forEach(function (t) {\n    if (!t.endtime || t.endtime < since || t.endtime > now) { return;\
+        \ }\n    if (!t.upid || !t.worker_type || !isFinite(t.starttime) || t.starttime > t.endtime) { throw 'Invalid completed\
+        \ task'; }\n    if (seen[t.upid]) { return; }\n    seen[t.upid] = true;\n    var hash = 0;\n    for (var j = 0; j\
+        \ < t.upid.length; j++) { hash = ((hash * 31) + t.upid.charCodeAt(j)) >>> 0; }\n    shards[hash % 16].tasks.push({upid:\
+        \ t.upid, node: t.node || '', worker_type: t.worker_type, worker_id: t.worker_id || '', starttime: Number(t.starttime),\
+        \ endtime: Number(t.endtime), status: t.status || 'unknown'});\n});\nshards.forEach(function (s) {\n    // ASCII JSON\
+        \ gives a reliable byte bound even for non-ASCII error messages.\n    var encoded = JSON.stringify(s);\n    var size\
+        \ = 0;\n    for (var k = 0; k < encoded.length; k++) { size += encoded.charCodeAt(k) < 127 ? 1 : 6; }\n    if (size\
+        \ > 60000) { throw 'Task shard exceeds 60000 bytes; lower lookback or use incremental ingestion'; }\n});\nreturn JSON.stringify({shards:\
+        \ shards});\n"
+      timeout: 60s
+      parameters:
+      - &id001
+        name: host
+        value: '{$PBS.HOST}'
+      - &id002
+        name: port
+        value: '{$PBS.PORT}'
+      - &id003
+        name: token
+        value: '{$PBS.TOKEN.ID}'
+      - &id004
+        name: secret
+        value: '{$PBS.TOKEN.SECRET}'
+      - name: lookback
+        value: '{$PBS.DASHBOARD.LOOKBACK.HOURS}'
+      tags:
+      - tag: component
+        value: pbs-dashboard
+      description: All task results; complete PBS archive queried without starttime filter. Completion window split into 16
+        bounded text items. Failure never returns an empty healthy result.
+    - uuid: bd80a22cd6cd49e1a49a83b74f6c92ae
+      name: 'PBS dashboard: Completed tasks part 0'
+      type: DEPENDENT
+      key: pbs.dashboard.tasks.completed[0]
+      history: 90d
+      value_type: TEXT
+      master_item:
+        key: pbs.dashboard.tasks.raw
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.shards[0]
+      tags:
+      - tag: component
+        value: pbs-dashboard
+      description: Overlapping completion snapshots, deduplicated by UPID. All 16 parts are required. Do not add discard-unchanged
+        preprocessing.
+    - uuid: c087b1e7936d44c7aef68cbe4b603b1d
+      name: 'PBS dashboard: Completed tasks part 1'
+      type: DEPENDENT
+      key: pbs.dashboard.tasks.completed[1]
+      history: 90d
+      value_type: TEXT
+      master_item:
+        key: pbs.dashboard.tasks.raw
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.shards[1]
+      tags:
+      - tag: component
+        value: pbs-dashboard
+      description: Overlapping completion snapshots, deduplicated by UPID. All 16 parts are required. Do not add discard-unchanged
+        preprocessing.
+    - uuid: 9f596aeeec554292b0f647e0ba7fb460
+      name: 'PBS dashboard: Completed tasks part 2'
+      type: DEPENDENT
+      key: pbs.dashboard.tasks.completed[2]
+      history: 90d
+      value_type: TEXT
+      master_item:
+        key: pbs.dashboard.tasks.raw
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.shards[2]
+      tags:
+      - tag: component
+        value: pbs-dashboard
+      description: Overlapping completion snapshots, deduplicated by UPID. All 16 parts are required. Do not add discard-unchanged
+        preprocessing.
+    - uuid: 0ea2bd8c2c8d4a938d9a031d4beaefeb
+      name: 'PBS dashboard: Completed tasks part 3'
+      type: DEPENDENT
+      key: pbs.dashboard.tasks.completed[3]
+      history: 90d
+      value_type: TEXT
+      master_item:
+        key: pbs.dashboard.tasks.raw
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.shards[3]
+      tags:
+      - tag: component
+        value: pbs-dashboard
+      description: Overlapping completion snapshots, deduplicated by UPID. All 16 parts are required. Do not add discard-unchanged
+        preprocessing.
+    - uuid: baba28e7ddc04e4ca82dcf51c67a3451
+      name: 'PBS dashboard: Completed tasks part 4'
+      type: DEPENDENT
+      key: pbs.dashboard.tasks.completed[4]
+      history: 90d
+      value_type: TEXT
+      master_item:
+        key: pbs.dashboard.tasks.raw
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.shards[4]
+      tags:
+      - tag: component
+        value: pbs-dashboard
+      description: Overlapping completion snapshots, deduplicated by UPID. All 16 parts are required. Do not add discard-unchanged
+        preprocessing.
+    - uuid: 9274c91c35084f71b483bdfc950577b8
+      name: 'PBS dashboard: Completed tasks part 5'
+      type: DEPENDENT
+      key: pbs.dashboard.tasks.completed[5]
+      history: 90d
+      value_type: TEXT
+      master_item:
+        key: pbs.dashboard.tasks.raw
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.shards[5]
+      tags:
+      - tag: component
+        value: pbs-dashboard
+      description: Overlapping completion snapshots, deduplicated by UPID. All 16 parts are required. Do not add discard-unchanged
+        preprocessing.
+    - uuid: 348154d4f8954bf4843613f394b25b07
+      name: 'PBS dashboard: Completed tasks part 6'
+      type: DEPENDENT
+      key: pbs.dashboard.tasks.completed[6]
+      history: 90d
+      value_type: TEXT
+      master_item:
+        key: pbs.dashboard.tasks.raw
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.shards[6]
+      tags:
+      - tag: component
+        value: pbs-dashboard
+      description: Overlapping completion snapshots, deduplicated by UPID. All 16 parts are required. Do not add discard-unchanged
+        preprocessing.
+    - uuid: 8cc39d1a4a82456e97ed81d6c4818921
+      name: 'PBS dashboard: Completed tasks part 7'
+      type: DEPENDENT
+      key: pbs.dashboard.tasks.completed[7]
+      history: 90d
+      value_type: TEXT
+      master_item:
+        key: pbs.dashboard.tasks.raw
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.shards[7]
+      tags:
+      - tag: component
+        value: pbs-dashboard
+      description: Overlapping completion snapshots, deduplicated by UPID. All 16 parts are required. Do not add discard-unchanged
+        preprocessing.
+    - uuid: 38277cbe20624bd89145f9e855aa4358
+      name: 'PBS dashboard: Completed tasks part 8'
+      type: DEPENDENT
+      key: pbs.dashboard.tasks.completed[8]
+      history: 90d
+      value_type: TEXT
+      master_item:
+        key: pbs.dashboard.tasks.raw
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.shards[8]
+      tags:
+      - tag: component
+        value: pbs-dashboard
+      description: Overlapping completion snapshots, deduplicated by UPID. All 16 parts are required. Do not add discard-unchanged
+        preprocessing.
+    - uuid: 032cec6f66b0456daabca19eaba9946b
+      name: 'PBS dashboard: Completed tasks part 9'
+      type: DEPENDENT
+      key: pbs.dashboard.tasks.completed[9]
+      history: 90d
+      value_type: TEXT
+      master_item:
+        key: pbs.dashboard.tasks.raw
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.shards[9]
+      tags:
+      - tag: component
+        value: pbs-dashboard
+      description: Overlapping completion snapshots, deduplicated by UPID. All 16 parts are required. Do not add discard-unchanged
+        preprocessing.
+    - uuid: 3d13fc4cc03a4072998a84e60ee5fc49
+      name: 'PBS dashboard: Completed tasks part 10'
+      type: DEPENDENT
+      key: pbs.dashboard.tasks.completed[10]
+      history: 90d
+      value_type: TEXT
+      master_item:
+        key: pbs.dashboard.tasks.raw
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.shards[10]
+      tags:
+      - tag: component
+        value: pbs-dashboard
+      description: Overlapping completion snapshots, deduplicated by UPID. All 16 parts are required. Do not add discard-unchanged
+        preprocessing.
+    - uuid: 6e06e263e3814226b16637e7f5e920d2
+      name: 'PBS dashboard: Completed tasks part 11'
+      type: DEPENDENT
+      key: pbs.dashboard.tasks.completed[11]
+      history: 90d
+      value_type: TEXT
+      master_item:
+        key: pbs.dashboard.tasks.raw
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.shards[11]
+      tags:
+      - tag: component
+        value: pbs-dashboard
+      description: Overlapping completion snapshots, deduplicated by UPID. All 16 parts are required. Do not add discard-unchanged
+        preprocessing.
+    - uuid: b2437341eed7406c8de4787b92865bf7
+      name: 'PBS dashboard: Completed tasks part 12'
+      type: DEPENDENT
+      key: pbs.dashboard.tasks.completed[12]
+      history: 90d
+      value_type: TEXT
+      master_item:
+        key: pbs.dashboard.tasks.raw
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.shards[12]
+      tags:
+      - tag: component
+        value: pbs-dashboard
+      description: Overlapping completion snapshots, deduplicated by UPID. All 16 parts are required. Do not add discard-unchanged
+        preprocessing.
+    - uuid: 6019f92c407040cba549efb498e81706
+      name: 'PBS dashboard: Completed tasks part 13'
+      type: DEPENDENT
+      key: pbs.dashboard.tasks.completed[13]
+      history: 90d
+      value_type: TEXT
+      master_item:
+        key: pbs.dashboard.tasks.raw
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.shards[13]
+      tags:
+      - tag: component
+        value: pbs-dashboard
+      description: Overlapping completion snapshots, deduplicated by UPID. All 16 parts are required. Do not add discard-unchanged
+        preprocessing.
+    - uuid: 0dd7777ee2ca4a2cb3bbff94c7b12dd0
+      name: 'PBS dashboard: Completed tasks part 14'
+      type: DEPENDENT
+      key: pbs.dashboard.tasks.completed[14]
+      history: 90d
+      value_type: TEXT
+      master_item:
+        key: pbs.dashboard.tasks.raw
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.shards[14]
+      tags:
+      - tag: component
+        value: pbs-dashboard
+      description: Overlapping completion snapshots, deduplicated by UPID. All 16 parts are required. Do not add discard-unchanged
+        preprocessing.
+    - uuid: 4112a6d2b0ce4b7f80c33d53a9742746
+      name: 'PBS dashboard: Completed tasks part 15'
+      type: DEPENDENT
+      key: pbs.dashboard.tasks.completed[15]
+      history: 90d
+      value_type: TEXT
+      master_item:
+        key: pbs.dashboard.tasks.raw
+      preprocessing:
+      - type: JSONPATH
+        parameters:
+        - $.shards[15]
+      tags:
+      - tag: component
+        value: pbs-dashboard
+      description: Overlapping completion snapshots, deduplicated by UPID. All 16 parts are required. Do not add discard-unchanged
+        preprocessing.
+    - uuid: 9229736002e6461cadcc19a926fb6a95
+      name: 'PBS dashboard: Running tasks'
+      type: SCRIPT
+      key: pbs.dashboard.tasks.running
+      delay: 1m
+      history: 1d
+      value_type: TEXT
+      params: "var p = JSON.parse(value);\nvar req = new HttpRequest();\nreq.addHeader('Authorization: PBSAPIToken=' + p.token\
+        \ + ':' + p.secret);\nvar base = 'https://' + p.host + ':' + p.port + '/api2/json';\nvar permissions = req.get(base\
+        \ + '/access/permissions?path=/system/tasks');\nif (req.getStatus() !== 200) { throw 'Cannot verify task audit permissions:\
+        \ HTTP ' + req.getStatus(); }\nvar acl = JSON.parse(permissions).data;\nif (!acl || !acl['/system/tasks'] || !Object.prototype.hasOwnProperty.call(acl['/system/tasks'],\
+        \ 'Sys.Audit')) { throw 'Sys.Audit on /system/tasks required; refusing partial per-user task list'; }\nvar response\
+        \ = req.get(base + '/nodes/localhost/tasks?running=true&limit=0');\nif (req.getStatus() !== 200) { throw 'PBS running\
+        \ query: HTTP ' + req.getStatus(); }\nvar tasks = JSON.parse(response).data;\nif (!Array.isArray(tasks)) { throw 'Invalid\
+        \ running task list'; }\ntasks = tasks.filter(function(t) { return !t.endtime; }).map(function(t) {\n    if (!t.upid\
+        \ || !t.worker_type || !isFinite(t.starttime)) { throw 'Invalid running task'; }\n    return {upid: t.upid, worker_type:\
+        \ t.worker_type, worker_id: t.worker_id || '', starttime: Number(t.starttime), node: t.node || ''};\n});\nvar result\
+        \ = JSON.stringify({version: 1, until: Math.floor(Date.now() / 1000), tasks: tasks});\nvar size = 0;\nfor (var i =\
+        \ 0; i < result.length; i++) { size += result.charCodeAt(i) < 127 ? 1 : 6; }\nif (size > 60000) { throw 'Running task\
+        \ list exceeds 60000 bytes'; }\nreturn result;\n"
+      timeout: 30s
+      parameters:
+      - *id001
+      - *id002
+      - *id003
+      - *id004
+      tags:
+      - tag: component
+        value: pbs-dashboard
+    discovery_rules:
+    - uuid: de800b33f3054bb5a49d5e68f4c7851a
+      name: 'PBS: Backup group discovery'
+      type: DEPENDENT
+      key: pbs.backupgroup.discovery
+      lifetime: '{$PBS.LLD.KEEP.LOST}'
+      enabled_lifetime_type: DISABLE_AFTER
+      enabled_lifetime: '{$PBS.LLD.DISABLE.LOST}'
+      description: 'Discovers the backup groups (backup-type/backup-id, e.g. host/myclient)
+
+        that have at least one snapshot in any datastore and any namespace,
+
+        including the root namespace. Each discovered entity is identified by
+
+        datastore, namespace and group, so the same group name in different
+
+        namespaces is tracked separately.
+
+        Note: a client that has never produced a single snapshot is not
+
+        discovered and therefore not monitored for freshness.
+
+        '
+      item_prototypes:
+      - uuid: e41c4d860873477a97611b98bb8ca60e
+        name: 'PBS: Backup group [{#DATASTORE.NAME}{#BACKUP.NAMESPACE.SUFFIX}/{#BACKUP.GROUP}] Last Snapshot Age'
+        type: DEPENDENT
+        key: pbs.backupgroup.lastsnapshot.age[{#DATASTORE.NAME},{#BACKUP.NAMESPACE},{#BACKUP.GROUP}]
+        history: 90d
+        units: s
+        description: 'Seconds since the most recent snapshot of backup group {#BACKUP.GROUP}
+
+          in datastore {#DATASTORE.NAME}{#BACKUP.NAMESPACE.SUFFIX}. An empty
+
+          namespace suffix denotes the datastore''s root namespace.
+
+          For datastores filled by a sync job the snapshots keep the original
+
+          backup-time of the source, so on the sync target this measures
+
+          end-to-end freshness (client backup plus sync).
+
+          '
+        preprocessing:
+        - type: JSONPATH
+          parameters:
+          - $.[?(@.datastore == '{#DATASTORE.NAME}' && @.ns == '{#BACKUP.NAMESPACE}' && @.group == '{#BACKUP.GROUP}')].last.first()
+          error_handler: DISCARD_VALUE
+        - type: JAVASCRIPT
+          parameters:
+          - return Math.max(0, Math.floor(Date.now() / 1000) - value);
+        master_item:
+          key: pbs.backupgroups
+        tags:
+        - tag: backup_group
+          value: '{#BACKUP.GROUP}'
+        - tag: component
+          value: backup-freshness
+        - tag: datastore
+          value: '{#DATASTORE.NAME}'
+        - tag: namespace
+          value: '{#BACKUP.NAMESPACE}'
+        trigger_prototypes:
+        - uuid: 9d4d36649a1e4728839bcdf313f77e6f
+          expression: last(/Proxmox Backup Server by HTTP/pbs.backupgroup.lastsnapshot.age[{#DATASTORE.NAME},{#BACKUP.NAMESPACE},{#BACKUP.GROUP}])>{$PBS.SNAPSHOT.AGE.HIGH:"{#BACKUP.GROUP}"}
+          name: 'PBS: Backup group [{#DATASTORE.NAME}{#BACKUP.NAMESPACE.SUFFIX}/{#BACKUP.GROUP}] last snapshot older than
+            high threshold'
+          priority: HIGH
+          description: The most recent snapshot of backup group [{#BACKUP.GROUP}] in datastore [{#DATASTORE.NAME}{#BACKUP.NAMESPACE.SUFFIX}]
+            is older than {$PBS.SNAPSHOT.AGE.HIGH:"{#BACKUP.GROUP}"}. The client backup job has not produced a new snapshot
+            for an extended period; check the client and its backup schedule. If the source VM/CT was deleted, add the {$PBS.SNAPSHOT.IGNORE.COMMENT}
+            marker to the group comment in PBS to stop monitoring its freshness; this already-open problem then clears only
+            after the rule's lost-resource period, so suppress it to silence sooner (see the template description).
+          manual_close: 'YES'
+          dependencies:
+          - name: 'PBS: API service not available'
+            expression: last(/Proxmox Backup Server by HTTP/pbs.api.available)<>200
+        - uuid: ad372da28008485da184353c2922f644
+          expression: last(/Proxmox Backup Server by HTTP/pbs.backupgroup.lastsnapshot.age[{#DATASTORE.NAME},{#BACKUP.NAMESPACE},{#BACKUP.GROUP}])>{$PBS.SNAPSHOT.AGE.WARN:"{#BACKUP.GROUP}"}
+          name: 'PBS: Backup group [{#DATASTORE.NAME}{#BACKUP.NAMESPACE.SUFFIX}/{#BACKUP.GROUP}] last snapshot older than
+            warning threshold'
+          priority: WARNING
+          description: The most recent snapshot of backup group [{#BACKUP.GROUP}] in datastore [{#DATASTORE.NAME}{#BACKUP.NAMESPACE.SUFFIX}]
+            is older than {$PBS.SNAPSHOT.AGE.WARN:"{#BACKUP.GROUP}"}. A recent client backup run may have failed or been skipped.
+            If the source VM/CT was deleted, add the {$PBS.SNAPSHOT.IGNORE.COMMENT} marker to the group comment in PBS to
+            stop monitoring its freshness; this already-open problem then clears only after the rule's lost-resource period,
+            so suppress it to silence sooner (see the template description).
+          manual_close: 'YES'
+          dependencies:
+          - name: 'PBS: API service not available'
+            expression: last(/Proxmox Backup Server by HTTP/pbs.api.available)<>200
+          - name: 'PBS: Backup group [{#DATASTORE.NAME}{#BACKUP.NAMESPACE.SUFFIX}/{#BACKUP.GROUP}] last snapshot older than
+              high threshold'
+            expression: last(/Proxmox Backup Server by HTTP/pbs.backupgroup.lastsnapshot.age[{#DATASTORE.NAME},{#BACKUP.NAMESPACE},{#BACKUP.GROUP}])>{$PBS.SNAPSHOT.AGE.HIGH:"{#BACKUP.GROUP}"}
+      master_item:
+        key: pbs.backupgroups
+      lld_macro_paths:
+      - lld_macro: '{#BACKUP.COMMENT}'
+        path: $.comment
+      - lld_macro: '{#BACKUP.GROUP}'
+        path: $.group
+      - lld_macro: '{#BACKUP.ID}'
+        path: $.id
+      - lld_macro: '{#BACKUP.NAMESPACE.SUFFIX}'
+        path: $.ns_suffix
+      - lld_macro: '{#BACKUP.NAMESPACE}'
+        path: $.ns
+      - lld_macro: '{#BACKUP.TYPE}'
+        path: $.type
+      - lld_macro: '{#DATASTORE.NAME}'
+        path: $.datastore
+      overrides:
+      - name: No freshness triggers for comment-marked backup groups
+        step: '1'
+        filter:
+          conditions:
+          - macro: '{#BACKUP.COMMENT}'
+            value: '{$PBS.SNAPSHOT.IGNORE.COMMENT}'
+        operations:
+        - operationobject: TRIGGER_PROTOTYPE
+          operator: LIKE
+          value: last snapshot older than
+          discover: NO_DISCOVER
+    - uuid: 5eec729d0e1c4e529cdc884a6c5887db
+      name: 'PBS: Datastore discovery'
+      type: DEPENDENT
+      key: pbs.datastore.discovery
+      lifetime: '{$PBS.LLD.KEEP.LOST}'
+      enabled_lifetime_type: DISABLE_AFTER
+      enabled_lifetime: '{$PBS.LLD.DISABLE.LOST}'
+      description: Discovers the datastores configured on the Proxmox Backup Server from the datastore-usage endpoint.
+      item_prototypes:
+      - uuid: 60f2c0498c414dfdab7e80cc7ea2985b
+        name: 'PBS: Datastore [{#DATASTORE.NAME}] Available Size'
+        type: DEPENDENT
+        key: pbs.datastore.available[{#DATASTORE.NAME}]
+        history: 90d
+        units: bytes
+        description: Available size of datastore in bytes.
+        preprocessing:
+        - type: JSONPATH
+          parameters:
+          - $.[?(@.store == '{#DATASTORE.NAME}')].avail.first()
+        - type: DISCARD_UNCHANGED_HEARTBEAT
+          parameters:
+          - 1h
+        master_item:
+          key: pbs.datastore.status
+        tags:
+        - tag: component
+          value: storage
+        - tag: datastore
+          value: '{#DATASTORE.NAME}'
+        trigger_prototypes:
+        - uuid: 79b3b6148288487f86d596ffdce93434
+          expression: 'min(/Proxmox Backup Server by HTTP/pbs.datastore.available[{#DATASTORE.NAME}],15m)<
+
+            {$PBS.DATASTORE.AVAILABLE.MIN:"{#DATASTORE.NAME}"}
+
+            '
+          name: 'PBS: Datastore [{#DATASTORE.NAME}] Available Size'
+          priority: HIGH
+          description: Datastore [{#DATASTORE.NAME}] has less than {$PBS.DATASTORE.AVAILABLE.MIN:"{#DATASTORE.NAME}"} bytes
+            available.
+          dependencies:
+          - name: 'PBS: API service not available'
+            expression: last(/Proxmox Backup Server by HTTP/pbs.api.available)<>200
+      - uuid: 75d30b86c1234fb08f90b5f6cbe958af
+        name: 'PBS: Datastore [{#DATASTORE.NAME}] Error'
+        type: DEPENDENT
+        key: pbs.datastore.error[{#DATASTORE.NAME}]
+        history: 90d
+        value_type: TEXT
+        description: Error status of datastore.
+        preprocessing:
+        - type: JSONPATH
+          parameters:
+          - $.[?(@.store == '{#DATASTORE.NAME}')].error.first()
+          error_handler: CUSTOM_VALUE
+          error_handler_params: No Error
+        - type: DISCARD_UNCHANGED_HEARTBEAT
+          parameters:
+          - 1h
+        master_item:
+          key: pbs.datastore.status
+        tags:
+        - tag: component
+          value: storage
+        - tag: datastore
+          value: '{#DATASTORE.NAME}'
+        trigger_prototypes:
+        - uuid: b9adc2dcab1f417ea18bcbfceadfb725
+          expression: find(/Proxmox Backup Server by HTTP/pbs.datastore.error[{#DATASTORE.NAME}],,"like","No Error")=0
+          name: 'PBS: Datastore [{#DATASTORE.NAME}] Error'
+          priority: HIGH
+          description: Datastore [{#DATASTORE.NAME}] is reporting an error!
+          dependencies:
+          - name: 'PBS: API service not available'
+            expression: last(/Proxmox Backup Server by HTTP/pbs.api.available)<>200
+      - uuid: a75f614f0bfa43b6b2c6d70456098dad
+        name: 'PBS: Datastore [{#DATASTORE.NAME}] Estimated Full Date'
+        type: DEPENDENT
+        key: pbs.datastore.estimatedfulldate[{#DATASTORE.NAME}]
+        history: 90d
+        value_type: TEXT
+        description: 'Estimation of the Date Time Stamp when the storage will be full.
+
+          It''s calculated via a simple Linear Regression (Least Squares) over the RRD data of the
+
+          last Month. Missing if not enough data points are available yet. An estimate in the past
+
+          means that usage is declining or not changing.
+
+          The value is discarded when PBS reports no estimate, for example when not
+
+          enough data points exist or for removable/offline datastores (PBS 4.x).
+
+          '
+        preprocessing:
+        - type: JSONPATH
+          parameters:
+          - $.[?(@.store == '{#DATASTORE.NAME}')].['estimated-full-date'].first()
+          error_handler: DISCARD_VALUE
+        - type: JAVASCRIPT
+          parameters:
+          - 'var current_unixtime = Math.floor(Date.now() / 1000);
+
+            var delta = value - current_unixtime;
+
+            if (delta < 0) return "Never";
+
+            return new Date(value * 1000);
+
+            '
+        - type: DISCARD_UNCHANGED_HEARTBEAT
+          parameters:
+          - 1h
+        master_item:
+          key: pbs.datastore.status
+        tags:
+        - tag: component
+          value: storage
+        - tag: datastore
+          value: '{#DATASTORE.NAME}'
+      - uuid: 1bb5ff8c93604d188b85e91006e3987f
+        name: 'PBS: Datastore [{#DATASTORE.NAME}] Estimated Seconds to Full'
+        type: DEPENDENT
+        key: pbs.datastore.estimatedsecondstofull[{#DATASTORE.NAME}]
+        history: 90d
+        units: s
+        description: 'Estimated number of seconds until the datastore is full.
+
+          It''s calculated via a simple Linear Regression (Least Squares) over the RRD data of the
+
+          last Month. Missing if not enough data points are available yet. An estimate in the past
+
+          means that usage is declining or not changing.
+
+          The value is discarded when PBS reports no estimate, for example when not
+
+          enough data points exist or for removable/offline datastores (PBS 4.x).
+
+          '
+        preprocessing:
+        - type: JSONPATH
+          parameters:
+          - $.[?(@.store == '{#DATASTORE.NAME}')].['estimated-full-date'].first()
+          error_handler: DISCARD_VALUE
+        - type: JAVASCRIPT
+          parameters:
+          - 'var current_unixtime = Math.floor(Date.now() / 1000);
+
+            var delta = Math.max(0, (value - current_unixtime));
+
+            return delta;
+
+            '
+        - type: DISCARD_UNCHANGED_HEARTBEAT
+          parameters:
+          - 1h
+        master_item:
+          key: pbs.datastore.status
+        tags:
+        - tag: component
+          value: storage
+        - tag: datastore
+          value: '{#DATASTORE.NAME}'
+        trigger_prototypes:
+        - uuid: 48c8a3296a0d49e5b000646527a9906d
+          expression: max(/Proxmox Backup Server by HTTP/pbs.datastore.estimatedsecondstofull[{#DATASTORE.NAME}],15m)<2419200
+            and min(/Proxmox Backup Server by HTTP/pbs.datastore.estimatedsecondstofull[{#DATASTORE.NAME}],15m)>0
+          name: 'PBS: Datastore [{#DATASTORE.NAME}] filling up within one month'
+          priority: WARNING
+          description: Datastore [{#DATASTORE.NAME}] is projected to fill within one month.
+          dependencies:
+          - name: 'PBS: API service not available'
+            expression: last(/Proxmox Backup Server by HTTP/pbs.api.available)<>200
+          - name: 'PBS: Datastore [{#DATASTORE.NAME}] filling up within one week'
+            expression: max(/Proxmox Backup Server by HTTP/pbs.datastore.estimatedsecondstofull[{#DATASTORE.NAME}],15m)<604800
+              and min(/Proxmox Backup Server by HTTP/pbs.datastore.estimatedsecondstofull[{#DATASTORE.NAME}],15m)>0
+        - uuid: f8899123a86144a0a306a77143c681cb
+          expression: max(/Proxmox Backup Server by HTTP/pbs.datastore.estimatedsecondstofull[{#DATASTORE.NAME}],15m)<604800
+            and min(/Proxmox Backup Server by HTTP/pbs.datastore.estimatedsecondstofull[{#DATASTORE.NAME}],15m)>0
+          name: 'PBS: Datastore [{#DATASTORE.NAME}] filling up within one week'
+          priority: HIGH
+          description: Datastore [{#DATASTORE.NAME}] is projected to fill within one week.
+          dependencies:
+          - name: 'PBS: API service not available'
+            expression: last(/Proxmox Backup Server by HTTP/pbs.api.available)<>200
+      - uuid: 980e2da86ba74e5c9ca85b1ac308352d
+        name: 'PBS: Datastore [{#DATASTORE.NAME}] Estimated Time to Full'
+        type: DEPENDENT
+        key: pbs.datastore.estimatedtimetofull[{#DATASTORE.NAME}]
+        history: 90d
+        value_type: TEXT
+        description: 'Estimation of the Time until the storage will be full.
+
+          It''s calculated via a simple Linear Regression (Least Squares) over the RRD data of the
+
+          last Month. Missing if not enough data points are available yet. An estimate in the past
+
+          means that usage is declining or not changing.
+
+          The value is discarded when PBS reports no estimate, for example when not
+
+          enough data points exist or for removable/offline datastores (PBS 4.x).
+
+          '
+        preprocessing:
+        - type: JSONPATH
+          parameters:
+          - $.[?(@.store == '{#DATASTORE.NAME}')].['estimated-full-date'].first()
+          error_handler: DISCARD_VALUE
+        - type: JAVASCRIPT
+          parameters:
+          - 'var current_unixtime = Math.floor(Date.now() / 1000);
+
+            var delta = value - current_unixtime;
+
+            if (delta < 0) return "Never";
+
+
+            var days = Math.floor(delta / 86400);
+
+            delta -= days * 86400;
+
+
+            var hours = Math.floor(delta / 3600) % 24;
+
+            delta -= hours * 3600;
+
+
+            var minutes = Math.floor(delta / 60) % 60;
+
+            delta -= minutes * 60;
+
+
+            var seconds = Math.floor(delta % 60);
+
+
+            return days+" Days "+hours+":"+minutes+":"+seconds+" (Hours:Minutes:Seconds)";
+
+            '
+        - type: DISCARD_UNCHANGED_HEARTBEAT
+          parameters:
+          - 1h
+        master_item:
+          key: pbs.datastore.status
+        tags:
+        - tag: component
+          value: storage
+        - tag: datastore
+          value: '{#DATASTORE.NAME}'
+      - uuid: ba568908143c4e87873dd1dd1b733283
+        name: 'PBS: Datastore [{#DATASTORE.NAME}] Total Size'
+        type: DEPENDENT
+        key: pbs.datastore.total[{#DATASTORE.NAME}]
+        history: 90d
+        units: bytes
+        description: Total size of datastore in bytes.
+        preprocessing:
+        - type: JSONPATH
+          parameters:
+          - $.[?(@.store == '{#DATASTORE.NAME}')].total.first()
+        master_item:
+          key: pbs.datastore.status
+        tags:
+        - tag: component
+          value: storage
+        - tag: datastore
+          value: '{#DATASTORE.NAME}'
+      - uuid: 5839a1a69f48430cb580bb111486663f
+        name: 'PBS: Datastore [{#DATASTORE.NAME}] Used Size'
+        type: DEPENDENT
+        key: pbs.datastore.used[{#DATASTORE.NAME}]
+        history: 90d
+        units: bytes
+        description: Used size of datastore in bytes.
+        preprocessing:
+        - type: JSONPATH
+          parameters:
+          - $.[?(@.store == '{#DATASTORE.NAME}')].used.first()
+        - type: DISCARD_UNCHANGED_HEARTBEAT
+          parameters:
+          - 1h
+        master_item:
+          key: pbs.datastore.status
+        tags:
+        - tag: component
+          value: storage
+        - tag: datastore
+          value: '{#DATASTORE.NAME}'
+      master_item:
+        key: pbs.datastore.status
+      lld_macro_paths:
+      - lld_macro: '{#DATASTORE.NAME}'
+        path: $.store
+    - uuid: 4333aa3a0ee64fe8aede5e835d63923d
+      name: 'PBS: Disk discovery'
+      type: DEPENDENT
+      key: pbs.disk.discovery
+      lifetime: 30d
+      enabled_lifetime_type: DISABLE_NEVER
+      description: Discovers the physical disks reported by the Proxmox Backup Server node from the disk list endpoint.
+      item_prototypes:
+      - uuid: 85501120e36d48589a52d56d0dec55d7
+        name: 'PBS: Disk [{#DISK.PATH}] Model'
+        type: DEPENDENT
+        key: pbs.disk.model[{#DISK.PATH}]
+        history: 90d
+        value_type: TEXT
+        description: Model of the disk.
+        preprocessing:
+        - type: JSONPATH
+          parameters:
+          - $.[?(@.devpath == '{#DISK.PATH}')].model.first()
+        - type: DISCARD_UNCHANGED_HEARTBEAT
+          parameters:
+          - 1h
+        master_item:
+          key: pbs.disks
+        tags:
+        - tag: component
+          value: storage
+        - tag: disk
+          value: '{#DISK.PATH}'
+        trigger_prototypes:
+        - uuid: bcd531f0197143c38860a24e1ef2ee5b
+          expression: last(/Proxmox Backup Server by HTTP/pbs.disk.model[{#DISK.PATH}],#1)<>last(/Proxmox Backup Server by
+            HTTP/pbs.disk.model[{#DISK.PATH}],#2)
+          name: 'PBS: Disk [{#DISK.PATH}] Model has changed'
+          priority: WARNING
+          description: The disk model reported for this device path has changed, which usually indicates the physical disk
+            was replaced.
+          manual_close: 'YES'
+          dependencies:
+          - name: 'PBS: API service not available'
+            expression: last(/Proxmox Backup Server by HTTP/pbs.api.available)<>200
+      - uuid: ff389bb665884d11b41b77c5b932bbd0
+        name: 'PBS: Disk [{#DISK.PATH}] Name'
+        type: DEPENDENT
+        key: pbs.disk.name[{#DISK.PATH}]
+        history: 90d
+        value_type: TEXT
+        description: Name of the disk.
+        preprocessing:
+        - type: JSONPATH
+          parameters:
+          - $.[?(@.devpath == '{#DISK.PATH}')].name.first()
+        - type: DISCARD_UNCHANGED_HEARTBEAT
+          parameters:
+          - 1h
+        master_item:
+          key: pbs.disks
+        tags:
+        - tag: component
+          value: storage
+        - tag: disk
+          value: '{#DISK.PATH}'
+      - uuid: 485d2a3a98e944008618a91cd43c30f3
+        name: 'PBS: Disk [{#DISK.PATH}] Serial'
+        type: DEPENDENT
+        key: pbs.disk.serial[{#DISK.PATH}]
+        history: 90d
+        value_type: TEXT
+        description: Serial of the disk.
+        preprocessing:
+        - type: JSONPATH
+          parameters:
+          - $.[?(@.devpath == '{#DISK.PATH}')].serial.first()
+        - type: DISCARD_UNCHANGED_HEARTBEAT
+          parameters:
+          - 1h
+        master_item:
+          key: pbs.disks
+        tags:
+        - tag: component
+          value: storage
+        - tag: disk
+          value: '{#DISK.PATH}'
+        trigger_prototypes:
+        - uuid: f07a872469d94d0dae3b955656593f66
+          expression: last(/Proxmox Backup Server by HTTP/pbs.disk.serial[{#DISK.PATH}],#1)<>last(/Proxmox Backup Server by
+            HTTP/pbs.disk.serial[{#DISK.PATH}],#2)
+          name: 'PBS: Disk [{#DISK.PATH}] Serial has changed'
+          priority: WARNING
+          description: The disk serial number reported for this device path has changed, which usually indicates the physical
+            disk was replaced.
+          manual_close: 'YES'
+          dependencies:
+          - name: 'PBS: API service not available'
+            expression: last(/Proxmox Backup Server by HTTP/pbs.api.available)<>200
+      - uuid: 7c31eaeb57f14ab9b457fa6e968b9ca4
+        name: 'PBS: Disk [{#DISK.PATH}] Size'
+        type: DEPENDENT
+        key: pbs.disk.size[{#DISK.PATH}]
+        history: 90d
+        units: bytes
+        description: Total Size of disk in bytes.
+        preprocessing:
+        - type: JSONPATH
+          parameters:
+          - $.[?(@.devpath == '{#DISK.PATH}')].size.first()
+        - type: DISCARD_UNCHANGED_HEARTBEAT
+          parameters:
+          - 1h
+        master_item:
+          key: pbs.disks
+        tags:
+        - tag: component
+          value: storage
+        - tag: disk
+          value: '{#DISK.PATH}'
+      - uuid: 3d5ddd6ae9c84ded8f82da383a986d25
+        name: 'PBS: Disk [{#DISK.PATH}] Status'
+        type: DEPENDENT
+        key: pbs.disk.status[{#DISK.PATH}]
+        history: 90d
+        value_type: TEXT
+        description: Disk status.
+        preprocessing:
+        - type: JSONPATH
+          parameters:
+          - $.[?(@.devpath == '{#DISK.PATH}')].status.first()
+        - type: DISCARD_UNCHANGED_HEARTBEAT
+          parameters:
+          - 1h
+        master_item:
+          key: pbs.disks
+        tags:
+        - tag: component
+          value: storage
+        - tag: disk
+          value: '{#DISK.PATH}'
+        trigger_prototypes:
+        - uuid: 0ebb109edcbc40d095945ca9a530dc5f
+          expression: find(/Proxmox Backup Server by HTTP/pbs.disk.status[{#DISK.PATH}],,"like","failed")=1
+          name: 'PBS: Disk [{#DISK.PATH}] Status indicates a problem'
+          priority: WARNING
+          description: The disk SMART health status reported by PBS is "failed".
+          manual_close: 'YES'
+          dependencies:
+          - name: 'PBS: API service not available'
+            expression: last(/Proxmox Backup Server by HTTP/pbs.api.available)<>200
+      - uuid: 4e4148965fd9483bbc1ba7c145368bba
+        name: 'PBS: Disk [{#DISK.PATH}] Used'
+        type: DEPENDENT
+        key: pbs.disk.used[{#DISK.PATH}]
+        history: 90d
+        value_type: TEXT
+        description: Indicates where (and if) that disk is used by PBS.
+        preprocessing:
+        - type: JSONPATH
+          parameters:
+          - $.[?(@.devpath == '{#DISK.PATH}')].used.first()
+        - type: DISCARD_UNCHANGED_HEARTBEAT
+          parameters:
+          - 1h
+        master_item:
+          key: pbs.disks
+        tags:
+        - tag: component
+          value: storage
+        - tag: disk
+          value: '{#DISK.PATH}'
+        trigger_prototypes:
+        - uuid: 64b7d1789dd44d9eabaf3b072548a4db
+          expression: last(/Proxmox Backup Server by HTTP/pbs.disk.used[{#DISK.PATH}],#1)<>last(/Proxmox Backup Server by
+            HTTP/pbs.disk.used[{#DISK.PATH}],#2)
+          name: 'PBS: Disk [{#DISK.PATH}] Used has changed'
+          priority: WARNING
+          description: The usage of this disk reported by PBS has changed, for example it was added to or removed from a datastore.
+          manual_close: 'YES'
+          dependencies:
+          - name: 'PBS: API service not available'
+            expression: last(/Proxmox Backup Server by HTTP/pbs.api.available)<>200
+      - uuid: 3a781863820548b78994156dff6b5175
+        name: 'PBS: Disk [{#DISK.PATH}] Vendor'
+        type: DEPENDENT
+        key: pbs.disk.vendor[{#DISK.PATH}]
+        history: 90d
+        value_type: TEXT
+        description: Vendor of the disk.
+        preprocessing:
+        - type: JSONPATH
+          parameters:
+          - $.[?(@.devpath == '{#DISK.PATH}')].vendor.first()
+        - type: DISCARD_UNCHANGED_HEARTBEAT
+          parameters:
+          - 1h
+        master_item:
+          key: pbs.disks
+        tags:
+        - tag: component
+          value: storage
+        - tag: disk
+          value: '{#DISK.PATH}'
+      - uuid: 791a4b27bf53470cad24018548b2439d
+        name: 'PBS: Disk [{#DISK.PATH}] Wearout'
+        type: DEPENDENT
+        key: pbs.disk.wearout[{#DISK.PATH}]
+        history: 90d
+        value_type: FLOAT
+        units: '%'
+        description: 'Disk wearout reported by PBS, as a percentage.
+
+          Note: the direction of this value (whether a higher number means more or
+
+          less wear) is SSD-model dependent and not standardized across vendors.
+
+          The value is discarded for disks that do not report numeric wearout data.
+
+          '
+        preprocessing:
+        - type: JSONPATH
+          parameters:
+          - $.[?(@.devpath == '{#DISK.PATH}')].wearout.first()
+        - type: JAVASCRIPT
+          parameters:
+          - "var n = parseFloat(value);\nif (isNaN(n)) {\n    throw 'No numeric wearout data reported for this disk';\n}\n\
+            return n;\n"
+        - type: DISCARD_UNCHANGED_HEARTBEAT
+          parameters:
+          - 1h
+        master_item:
+          key: pbs.disks
+        tags:
+        - tag: component
+          value: storage
+        - tag: disk
+          value: '{#DISK.PATH}'
+      master_item:
+        key: pbs.disks
+      lld_macro_paths:
+      - lld_macro: '{#DISK.NAME}'
+        path: $.name
+      - lld_macro: '{#DISK.PATH}'
+        path: $.devpath
+      - lld_macro: '{#DISK.SERIAL}'
+        path: $.serial
+      - lld_macro: '{#DISK.SIZE}'
+        path: $.size
+      - lld_macro: '{#DISK.STATUS}'
+        path: $.status
+      - lld_macro: '{#DISK.TYPE}'
+        path: $.['disk-type']
+      - lld_macro: '{#DISK.USED}'
+        path: $.used
+      - lld_macro: '{#DISK.VENDOR}'
+        path: $.vendor
+      - lld_macro: '{#DISK.WEAROUT}'
+        path: $.wearout
+      overrides:
+      - name: No wearout item for disks without numeric wearout
+        step: '1'
+        filter:
+          conditions:
+          - macro: '{#DISK.WEAROUT}'
+            value: ^[0-9.]+$
+            operator: NOT_MATCHES_REGEX
+        operations:
+        - operator: LIKE
+          value: Wearout
+          discover: NO_DISCOVER
+    macros:
+    - macro: '{$PBS.DATASTORE.AVAILABLE.MIN}'
+      value: '10737418240'
+      description: Minimum available space in a datastore, in bytes (defaults to 10 GiB). Can be overridden per datastore
+        using the {#DATASTORE.NAME} macro context.
+    - macro: '{$PBS.HOST}'
+      value: <SET PBS HOSTNAME>
+      description: Hostname or IP address of the PBS server API endpoint. Must be set on the host.
+    - macro: '{$PBS.LLD.DISABLE.LOST}'
+      value: 1h
+      description: Grace period after which a discovered datastore or backup-group item is disabled once its datastore/group
+        no longer exists in PBS, instead of polling the gone resource and erroring for the full keep period. Must exceed the
+        discovery interval; the default is ~4 LLD poll cycles, which debounces a single incomplete API poll. Does not apply
+        to disk discovery.
+    - macro: '{$PBS.LLD.KEEP.LOST}'
+      value: 14d
+      description: Period after which a no-longer-present, already-disabled discovered datastore or backup-group item is deleted
+        from the host. Must exceed {$PBS.LLD.DISABLE.LOST}. Does not apply to disk discovery.
+    - macro: '{$PBS.PORT}'
+      value: '8007'
+      description: The API uses the HTTPS protocol and the server listens on port 8007 by default.
+    - macro: '{$PBS.SNAPSHOT.AGE.HIGH}'
+      value: 50h
+      description: Last-snapshot age of a backup group above which a HIGH severity trigger fires. Default suits a daily backup
+        schedule. Can be overridden per backup group using the {#BACKUP.GROUP} macro context; the context matches by group
+        name only, so the same group name in different namespaces shares one threshold.
+    - macro: '{$PBS.SNAPSHOT.AGE.WARN}'
+      value: 30h
+      description: Last-snapshot age of a backup group above which a WARNING severity trigger fires. Default suits a daily
+        backup schedule. Can be overridden per backup group using the {#BACKUP.GROUP} macro context; the context matches by
+        group name only, so the same group name in different namespaces shares one threshold.
+    - macro: '{$PBS.SNAPSHOT.IGNORE.COMMENT}'
+      value: (?i)no-monitor
+      description: 'Regular expression matched against a backup group''s comment; a match suppresses that group''s snapshot-freshness
+        triggers (the age item is kept, only the triggers are dropped). Use it for groups whose source VM/CT was deleted but
+        whose backups are intentionally retained: set the group comment in PBS (Datastore > Content > group > Edit comment)
+        to include the marker. Defaults to matching the text "no-monitor".'
+    - macro: '{$PBS.SNAPSHOT.INTERVAL}'
+      value: 15m
+      description: Polling interval of the backup group list used for snapshot freshness. Each poll lists every backup group
+        of each datastore across all namespaces (one namespace-list call plus one groups call per namespace per datastore),
+        so keep this interval moderate.
+    - macro: '{$PBS.TASKS.DAYS}'
+      value: '2'
+      description: Age of tasks to consider when looking for failed tasks (days).
+    - macro: '{$PBS.TOKEN.ID}'
+      value: USER@REALM!TOKENID
+      description: API tokens allow stateless access to most parts of the REST API by another system, software or API client.
+    - macro: '{$PBS.TOKEN.SECRET}'
+      type: SECRET_TEXT
+      description: Secret key of the API token.
+    - macro: '{$PBS.DASHBOARD.LOOKBACK.HOURS}'
+      value: '48'
+      description: Overlapping completion lookback (1..168 h). Default 48 h, collection every 5 minutes. PBS archive retention
+        must exceed this; outages longer than this may cause gaps.
+    valuemaps:
+    - uuid: b4e066bfeb334388a8fb9f30ad844459
+      name: HTTP response status code
+      mappings:
+      - value: '200'
+        newvalue: OK
+      - value: '301'
+        newvalue: Moved Permanently
+      - value: '400'
+        newvalue: Bad Request
+      - value: '401'
+        newvalue: Unauthorized
+      - value: '403'
+        newvalue: Forbidden
+      - value: '404'
+        newvalue: Not Found
+      - value: '405'
+        newvalue: Method Not Allowed
+      - value: '500'
+        newvalue: Internal Server Error
+      - value: '502'
+        newvalue: Bad Gateway
+      - value: '503'
+        newvalue: Service Unavailable
+      - value: '504'
+        newvalue: Gateway Timeout
+      - value: '520'
+        newvalue: Unknown Error

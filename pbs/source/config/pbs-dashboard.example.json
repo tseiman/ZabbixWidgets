@@ -1,0 +1,9 @@
+{
+  "hosts": {
+    "12345": {
+      "url": "https://pbs.example.invalid:8007",
+      "token_id": "monitor@pbs!zabbix",
+      "token_secret": "REPLACE_WITH_EXISTING_TOKEN_SECRET"
+    }
+  }
+}
