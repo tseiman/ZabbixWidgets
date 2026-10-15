@@ -85,7 +85,7 @@ class UniFiTopologyView {
             if (!rows.has(level)) rows.set(level, []);
             rows.get(level).push(mac);
         }
-        const width = Math.max(780, ...[...rows.values()].map(row => row.length * 255 + 80));
+        const width = Math.max(780, ...[...rows.values()].map(row => row.length * 285 + 80));
         const points = new Map();
         for (const [level, row] of rows) {
             const score = mac => { const xs = [...parents.get(mac)].filter(id => points.has(id)).map(id => points.get(id).x); return xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : width / 2; };
@@ -159,13 +159,14 @@ class UniFiTopologyView {
         const values = this._trafficPoints(node).map(point => Number(point[1])).filter(Number.isFinite);
         const maximum = this._niceMaximum(Math.max(1, ...values));
         const dimensions = {left: 0, top: 0, width: 72, height: 28};
-        const chart = this.svg('g', {
-            transform: 'translate(136,9)',
-            class: 'ut-traffic-mini',
-            tabindex: 0,
-            role: 'button',
-            'aria-label': node.name + ': Traffic-Diagramm vergrößern'
-        });
+        const wrapper = this.svg('foreignObject', {x: 164, y: 7, width: 76, height: 36, class: 'ut-traffic-mini-wrap'});
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'ut-traffic-mini';
+        button.setAttribute('aria-label', node.name + ': Traffic-Diagramm vergrößern');
+        button.title = 'RX ' + this._formatBits(node.traffic.rx?.latest)
+            + ' · TX ' + this._formatBits(node.traffic.tx?.latest) + ' · zum Vergrößern anklicken';
+        const chart = this.svg('svg', {viewBox: '0 0 72 30', width: 72, height: 30, 'aria-hidden': 'true'});
         chart.append(this.svg('rect', {width: 72, height: 30, rx: 5, class: 'ut-traffic-mini-bg'}));
         const rx = this._seriesPath(node.traffic.rx?.points, dimensions, period, maximum);
         const tx = this._seriesPath(node.traffic.tx?.points, dimensions, period, maximum);
@@ -175,18 +176,13 @@ class UniFiTopologyView {
             const marker = this._seriesMarker(node.traffic[direction]?.points, dimensions, period, maximum);
             if (marker) chart.append(this.svg('circle', {cx: marker.x, cy: marker.y, r: 1.8, class: css}));
         }
-        chart.append(this.svg('title', {}, 'RX ' + this._formatBits(node.traffic.rx?.latest)
-            + ' · TX ' + this._formatBits(node.traffic.tx?.latest) + ' · zum Vergrößern anklicken'));
-        const activate = event => {
-            event.preventDefault();
+        button.append(chart);
+        button.addEventListener('click', event => {
             event.stopPropagation();
-            this._openTraffic(node);
-        };
-        chart.addEventListener('click', activate);
-        chart.addEventListener('keydown', event => {
-            if (event.key === 'Enter' || event.key === ' ') activate(event);
+            this._openTraffic(node, button);
         });
-        return chart;
+        wrapper.append(button);
+        return wrapper;
     }
     _closeTraffic() {
         const dialog = this.trafficDialog;
@@ -196,7 +192,7 @@ class UniFiTopologyView {
             dialog.remove();
         }
     }
-    _openTraffic(node) {
+    _openTraffic(node, activator = null) {
         this._closeTraffic();
         if (!node.traffic || !this.data?.traffic_period) return;
 
@@ -257,7 +253,9 @@ class UniFiTopologyView {
                 const marker = this._seriesMarker(node.traffic[direction]?.points, dimensions, period, maximum);
                 if (marker) graph.append(this.svg('circle', {cx: marker.x, cy: marker.y, r: 3.5, class: css}));
             }
-            dialog.append(graph);
+            const graphScroll = this.el('div', null, 'ut-traffic-chart-scroll');
+            graphScroll.append(graph);
+            dialog.append(graphScroll);
         }
 
         const source = direction => node.traffic[direction]
@@ -270,6 +268,7 @@ class UniFiTopologyView {
         dialog.addEventListener('close', () => {
             if (this.trafficDialog === dialog) this.trafficDialog = null;
             dialog.remove();
+            if (activator?.isConnected) activator.focus();
         });
         dialog.addEventListener('click', event => {
             if (event.target === dialog) {
@@ -339,10 +338,10 @@ class UniFiTopologyView {
             const point = graph.points.get(node.mac);
             const status = this.status(node);
             const selected = this.selected === node.mac;
-            const group = this.svg('g', {transform: 'translate(' + (point.x - 110) + ',' + point.y + ')', tabindex: 0, role: 'button', 'aria-label': node.name + ', ' + status.label + ', Endgeräte und Probleme anzeigen', 'aria-expanded': selected ? 'true' : 'false', 'data-mac': node.mac, class: 'ut-node' + (selected ? ' ut-selected' : '')});
-            group.append(this.svg('rect', {width: 220, height: 96, rx: 12, class: 'ut-node-bg', stroke: status.color, 'stroke-width': status.severity >= 0 ? 4 : 2}));
+            const group = this.svg('g', {transform: 'translate(' + (point.x - 125) + ',' + point.y + ')', tabindex: 0, role: 'button', 'aria-label': node.name + ', ' + status.label + ', Endgeräte und Probleme anzeigen', 'aria-expanded': selected ? 'true' : 'false', 'data-mac': node.mac, class: 'ut-node' + (selected ? ' ut-selected' : '')});
+            group.append(this.svg('rect', {width: 250, height: 96, rx: 12, class: 'ut-node-bg', stroke: status.color, 'stroke-width': status.severity >= 0 ? 4 : 2}));
             group.append(this.svg('circle', {cx: 19, cy: 24, r: 5, fill: status.color}));
-            group.append(this.svg('text', {x: 32, y: 29, class: 'ut-node-name'}, this.short(node.name, node.traffic ? 11 : 22)));
+            group.append(this.svg('text', {x: 32, y: 29, class: 'ut-node-name'}, this.short(node.name, node.traffic ? 13 : 25)));
             group.append(this.svg('text', {x: 14, y: 55, class: 'ut-node-model'}, (node.manual ? 'Manuell ergänzt' : node.wireless ? 'Access Point' : 'Netzwerkgerät') + (node.model ? ' · ' + node.model : '')));
             group.append(this.svg('text', {x: 14, y: 80, class: 'ut-node-status'}, status.label));
             group.append(this.svg('title', {}, node.name + '\n' + node.mac + '\n' + status.label + '\n' + (node.host_name || node.mapping)));
@@ -406,7 +405,7 @@ class UniFiTopologyView {
             const trafficSummary = this.el('div', null, 'ut-traffic-summary');
             trafficSummary.append(
                 this.el('span', 'RX ' + this._formatBits(node.traffic.rx?.latest) + ' · TX ' + this._formatBits(node.traffic.tx?.latest)),
-                this.button('Traffic vergrößern', () => this._openTraffic(node))
+                this.button('Traffic vergrößern', event => this._openTraffic(node, event.currentTarget))
             );
             panel.append(trafficSummary);
         }
