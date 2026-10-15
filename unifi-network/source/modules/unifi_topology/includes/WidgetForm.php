@@ -7,11 +7,22 @@ use Zabbix\Widgets\Fields\CWidgetFieldTextBox;
 use Zabbix\Widgets\Fields\CWidgetFieldTextArea;
 use Zabbix\Widgets\Fields\CWidgetFieldIntegerBox;
 use Zabbix\Widgets\Fields\CWidgetFieldCheckBox;
+use Zabbix\Widgets\Fields\CWidgetFieldTimePeriod;
 
 class WidgetForm extends CWidgetForm {
     public function addFields(): self {
         return $this
             ->addField((new CWidgetFieldMultiSelectItem('itemid', _('Topologie-Master-Item')))->setMultiple(false)->setFlags(CWidgetField::FLAG_NOT_EMPTY | CWidgetField::FLAG_LABEL_ASTERISK))
+            ->addField(
+                (new CWidgetFieldTimePeriod('time_period', _('Traffic-Zeitraum')))
+                    ->setDefault([
+                        CWidgetField::FOREIGN_REFERENCE_KEY => CWidgetField::createTypedReference(
+                            CWidgetField::REFERENCE_DASHBOARD, \CWidgetsData::DATA_TYPE_TIME_PERIOD
+                        )
+                    ])
+                    ->setDefaultPeriod(['from' => 'now-1h', 'to' => 'now'])
+                    ->setFlags(CWidgetField::FLAG_NOT_EMPTY | CWidgetField::FLAG_LABEL_ASTERISK)
+            )
             ->addField((new CWidgetFieldTextBox('host_pattern', _('Exakter Zabbix-Hostname mit {name}')))->setDefault('UniFi Network - Site: "Default" - Device: "{name}"'))
             ->addField(new CWidgetFieldTextArea('bindings', _('Optionale Zuordnung: MAC=Host-ID, eine je Zeile')))
             ->addField(new CWidgetFieldTextArea('manual_nodes', _('Zusätzliche Geräte: id | Name | optionale Host-ID')))

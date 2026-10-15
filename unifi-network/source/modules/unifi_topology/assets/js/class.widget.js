@@ -6,6 +6,7 @@ class UniFiTopologyView {
         this.data = null;
         this.zoom = 1;
         this.expired = false;
+        this.trafficDialog = null;
         this.root.classList.add('ut-root');
     }
     el(tag, text, cls) {
@@ -21,6 +22,7 @@ class UniFiTopologyView {
         return node;
     }
     setData(data) {
+        this._closeTraffic();
         this.data = data;
         this.failed = false;
         if (!data.nodes.some(node => node.mac === this.selected)) this.selected = null;
@@ -28,6 +30,7 @@ class UniFiTopologyView {
         this.render();
     }
     showError(message) {
+        this._closeTraffic();
         this.failed = true;
         this.data = null;
         this.root.replaceChildren(this.el('div', message, 'ut-alert'));
@@ -82,19 +85,202 @@ class UniFiTopologyView {
             if (!rows.has(level)) rows.set(level, []);
             rows.get(level).push(mac);
         }
-        const width = Math.max(780, ...[...rows.values()].map(row => row.length * 230 + 80));
+        const width = Math.max(780, ...[...rows.values()].map(row => row.length * 255 + 80));
         const points = new Map();
         for (const [level, row] of rows) {
             const score = mac => { const xs = [...parents.get(mac)].filter(id => points.has(id)).map(id => points.get(id).x); return xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : width / 2; };
-            row.sort((a, b) => score(a) - score(b) || compare(a, b)).forEach((mac, i) => points.set(mac, {x: (i + 0.5) * width / row.length, y: 36 + level * 175}));
+            row.sort((a, b) => score(a) - score(b) || compare(a, b)).forEach((mac, i) => points.set(mac, {x: (i + 0.5) * width / row.length, y: 36 + level * 185}));
         }
-        return {points, width, height: Math.max(250, rows.size * 175 + 20)};
+        return {points, width, height: Math.max(250, rows.size * 185 + 20)};
     }
     button(label, action) {
         const button = this.el('button', label, 'ut-button');
         button.type = 'button';
         button.addEventListener('click', action);
         return button;
+    }
+    _trafficPoints(node) {
+        return ['rx', 'tx'].flatMap(direction => node.traffic?.[direction]?.points || []);
+    }
+    _formatBits(value) {
+        if (!Number.isFinite(Number(value))) return '–';
+        const units = ['bit/s', 'Kbit/s', 'Mbit/s', 'Gbit/s', 'Tbit/s'];
+        let number = Math.max(0, Number(value));
+        let unit = 0;
+        while (number >= 1000 && unit < units.length - 1) {
+            number /= 1000;
+            unit++;
+        }
+        const digits = number >= 100 || unit === 0 ? 0 : number >= 10 ? 1 : 2;
+        return number.toLocaleString(undefined, {maximumFractionDigits: digits}) + ' ' + units[unit];
+    }
+    _niceMaximum(value) {
+        if (!Number.isFinite(value) || value <= 0) return 1;
+        const power = Math.pow(10, Math.floor(Math.log10(value)));
+        const normalized = value / power;
+        const nice = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
+        return nice * power;
+    }
+    _seriesPath(points, dimensions, period, maximum) {
+        const usable = (points || [])
+            .map(point => [Number(point[0]), Number(point[1])])
+            .filter(point => Number.isFinite(point[0]) && Number.isFinite(point[1])
+                && point[0] >= period.from && point[0] <= period.to)
+            .sort((a, b) => a[0] - b[0]);
+        if (!usable.length) return '';
+        const deltas = usable.slice(1).map((point, index) => point[0] - usable[index][0]).filter(value => value > 0).sort((a, b) => a - b);
+        const typical = deltas.length ? deltas[Math.floor(deltas.length / 2)] : period.to - period.from;
+        const gap = Math.max(typical * 3, (period.to - period.from) / 320 * 3);
+        let previous = null;
+        return usable.map(point => {
+            const x = dimensions.left + (point[0] - period.from) / (period.to - period.from) * dimensions.width;
+            const y = dimensions.top + dimensions.height - Math.min(point[1], maximum) / maximum * dimensions.height;
+            const command = previous === null || point[0] - previous > gap ? 'M' : 'L';
+            previous = point[0];
+            return command + x.toFixed(2) + ' ' + y.toFixed(2);
+        }).join(' ');
+    }
+    _seriesMarker(points, dimensions, period, maximum) {
+        const usable = (points || [])
+            .map(point => [Number(point[0]), Number(point[1])])
+            .filter(point => Number.isFinite(point[0]) && Number.isFinite(point[1])
+                && point[0] >= period.from && point[0] <= period.to)
+            .sort((a, b) => a[0] - b[0]);
+        if (!usable.length) return null;
+        const point = usable[usable.length - 1];
+        return {
+            x: dimensions.left + (point[0] - period.from) / (period.to - period.from) * dimensions.width,
+            y: dimensions.top + dimensions.height - Math.min(point[1], maximum) / maximum * dimensions.height
+        };
+    }
+    _miniTraffic(node) {
+        if (!node.traffic || !this._trafficPoints(node).length) return null;
+        const period = this.data.traffic_period;
+        const values = this._trafficPoints(node).map(point => Number(point[1])).filter(Number.isFinite);
+        const maximum = this._niceMaximum(Math.max(1, ...values));
+        const dimensions = {left: 0, top: 0, width: 72, height: 28};
+        const chart = this.svg('g', {
+            transform: 'translate(136,9)',
+            class: 'ut-traffic-mini',
+            tabindex: 0,
+            role: 'button',
+            'aria-label': node.name + ': Traffic-Diagramm vergrößern'
+        });
+        chart.append(this.svg('rect', {width: 72, height: 30, rx: 5, class: 'ut-traffic-mini-bg'}));
+        const rx = this._seriesPath(node.traffic.rx?.points, dimensions, period, maximum);
+        const tx = this._seriesPath(node.traffic.tx?.points, dimensions, period, maximum);
+        if (rx) chart.append(this.svg('path', {d: rx, class: 'ut-traffic-line ut-traffic-rx'}));
+        if (tx) chart.append(this.svg('path', {d: tx, class: 'ut-traffic-line ut-traffic-tx'}));
+        for (const [direction, css] of [['rx', 'ut-traffic-marker-rx'], ['tx', 'ut-traffic-marker-tx']]) {
+            const marker = this._seriesMarker(node.traffic[direction]?.points, dimensions, period, maximum);
+            if (marker) chart.append(this.svg('circle', {cx: marker.x, cy: marker.y, r: 1.8, class: css}));
+        }
+        chart.append(this.svg('title', {}, 'RX ' + this._formatBits(node.traffic.rx?.latest)
+            + ' · TX ' + this._formatBits(node.traffic.tx?.latest) + ' · zum Vergrößern anklicken'));
+        const activate = event => {
+            event.preventDefault();
+            event.stopPropagation();
+            this._openTraffic(node);
+        };
+        chart.addEventListener('click', activate);
+        chart.addEventListener('keydown', event => {
+            if (event.key === 'Enter' || event.key === ' ') activate(event);
+        });
+        return chart;
+    }
+    _closeTraffic() {
+        const dialog = this.trafficDialog;
+        this.trafficDialog = null;
+        if (dialog?.isConnected) {
+            if (dialog.open) dialog.close();
+            dialog.remove();
+        }
+    }
+    _openTraffic(node) {
+        this._closeTraffic();
+        if (!node.traffic || !this.data?.traffic_period) return;
+
+        const dialog = document.createElement('dialog');
+        dialog.className = 'ut-traffic-dialog';
+        dialog.setAttribute('aria-labelledby', 'ut-traffic-title-' + node.mac.replaceAll(':', ''));
+        const header = this.el('div', null, 'ut-traffic-dialog-header');
+        const heading = this.el('div');
+        const title = this.el('h3', node.name + ' · RX/TX');
+        title.id = 'ut-traffic-title-' + node.mac.replaceAll(':', '');
+        heading.append(title, this.el('p', 'Gesamtdurchsatz aller eindeutigen physischen Ports', 'ut-traffic-subtitle'));
+        const close = this.button('Schließen', () => dialog.close());
+        close.classList.add('ut-traffic-close');
+        header.append(heading, close);
+        dialog.append(header);
+
+        const legend = this.el('div', null, 'ut-traffic-legend');
+        const rxLegend = this.el('span');
+        rxLegend.append(this.el('i', null, 'ut-traffic-dot ut-traffic-dot-rx'), document.createTextNode('RX ' + this._formatBits(node.traffic.rx?.latest)));
+        const txLegend = this.el('span');
+        txLegend.append(this.el('i', null, 'ut-traffic-dot ut-traffic-dot-tx'), document.createTextNode('TX ' + this._formatBits(node.traffic.tx?.latest)));
+        legend.append(rxLegend, txLegend);
+        dialog.append(legend);
+
+        const period = this.data.traffic_period;
+        const all = this._trafficPoints(node).map(point => Number(point[1])).filter(Number.isFinite);
+        if (!all.length) {
+            dialog.append(this.el('p', 'Für diesen Zeitraum sind keine Traffic-Daten verfügbar.', 'ut-traffic-empty'));
+        }
+        else {
+            const maximum = this._niceMaximum(Math.max(1, ...all));
+            const view = {width: 900, height: 380};
+            const dimensions = {left: 82, top: 18, width: 792, height: 300};
+            const graph = this.svg('svg', {viewBox: '0 0 ' + view.width + ' ' + view.height, role: 'img',
+                'aria-label': 'RX- und TX-Durchsatz von ' + node.name});
+            graph.classList.add('ut-traffic-chart');
+            for (let i = 0; i <= 5; i++) {
+                const y = dimensions.top + dimensions.height * i / 5;
+                const value = maximum * (1 - i / 5);
+                graph.append(this.svg('line', {x1: dimensions.left, y1: y, x2: dimensions.left + dimensions.width, y2: y, class: 'ut-traffic-grid'}));
+                graph.append(this.svg('text', {x: dimensions.left - 10, y: y + 4, 'text-anchor': 'end', class: 'ut-traffic-axis'}, this._formatBits(value)));
+            }
+            const duration = period.to - period.from;
+            for (let i = 0; i <= 5; i++) {
+                const clock = period.from + duration * i / 5;
+                const x = dimensions.left + dimensions.width * i / 5;
+                const date = new Date(clock * 1000);
+                const label = duration > 172800
+                    ? date.toLocaleDateString(undefined, {month: 'short', day: '2-digit'})
+                    : date.toLocaleTimeString(undefined, {hour: '2-digit', minute: '2-digit'});
+                graph.append(this.svg('text', {x, y: dimensions.top + dimensions.height + 28, 'text-anchor': i === 0 ? 'start' : i === 5 ? 'end' : 'middle', class: 'ut-traffic-axis'}, label));
+            }
+            const rx = this._seriesPath(node.traffic.rx?.points, dimensions, period, maximum);
+            const tx = this._seriesPath(node.traffic.tx?.points, dimensions, period, maximum);
+            if (rx) graph.append(this.svg('path', {d: rx, class: 'ut-traffic-line ut-traffic-rx ut-traffic-line-large'}));
+            if (tx) graph.append(this.svg('path', {d: tx, class: 'ut-traffic-line ut-traffic-tx ut-traffic-line-large'}));
+            for (const [direction, css] of [['rx', 'ut-traffic-marker-rx'], ['tx', 'ut-traffic-marker-tx']]) {
+                const marker = this._seriesMarker(node.traffic[direction]?.points, dimensions, period, maximum);
+                if (marker) graph.append(this.svg('circle', {cx: marker.x, cy: marker.y, r: 3.5, class: css}));
+            }
+            dialog.append(graph);
+        }
+
+        const source = direction => node.traffic[direction]
+            ? (node.traffic[direction].source === 'direct' ? 'Controller-Port-Raten' : 'aus Port-Zählerdifferenzen')
+            : 'keine Daten';
+        const from = new Date(period.from * 1000).toLocaleString();
+        const to = new Date(period.to * 1000).toLocaleString();
+        dialog.append(this.el('p', from + ' – ' + to + ' · RX: ' + source('rx') + ' · TX: ' + source('tx'), 'ut-traffic-footnote'));
+
+        dialog.addEventListener('close', () => {
+            if (this.trafficDialog === dialog) this.trafficDialog = null;
+            dialog.remove();
+        });
+        dialog.addEventListener('click', event => {
+            if (event.target === dialog) {
+                const box = dialog.getBoundingClientRect();
+                if (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom) dialog.close();
+            }
+        });
+        this.trafficDialog = dialog;
+        document.body.append(dialog);
+        dialog.showModal();
+        close.focus();
     }
     render() {
         const oldCanvas = this.root.querySelector('.ut-canvas');
@@ -135,7 +321,7 @@ class UniFiTopologyView {
         for (const edge of edges) {
             const a = graph.points.get(edge.up);
             const b = graph.points.get(edge.down);
-            const y1 = a.y + 88, y2 = b.y;
+            const y1 = a.y + 96, y2 = b.y;
             const mid = (y1 + y2) / 2;
             const path = this.svg('path', {d: 'M ' + a.x + ' ' + y1 + ' C ' + a.x + ' ' + mid + ' ' + b.x + ' ' + mid + ' ' + b.x + ' ' + y2, fill: 'none', stroke: '#8594a8', 'stroke-width': 2});
             if (edge.type === 'WIRELESS' || edge.manual) path.setAttribute('stroke-dasharray', edge.manual ? '9 5' : '3 4');
@@ -153,13 +339,15 @@ class UniFiTopologyView {
             const point = graph.points.get(node.mac);
             const status = this.status(node);
             const selected = this.selected === node.mac;
-            const group = this.svg('g', {transform: 'translate(' + (point.x - 97) + ',' + point.y + ')', tabindex: 0, role: 'button', 'aria-label': node.name + ', ' + status.label + ', Endgeräte und Probleme anzeigen', 'aria-expanded': selected ? 'true' : 'false', 'data-mac': node.mac, class: 'ut-node' + (selected ? ' ut-selected' : '')});
-            group.append(this.svg('rect', {width: 194, height: 88, rx: 12, class: 'ut-node-bg', stroke: status.color, 'stroke-width': status.severity >= 0 ? 4 : 2}));
+            const group = this.svg('g', {transform: 'translate(' + (point.x - 110) + ',' + point.y + ')', tabindex: 0, role: 'button', 'aria-label': node.name + ', ' + status.label + ', Endgeräte und Probleme anzeigen', 'aria-expanded': selected ? 'true' : 'false', 'data-mac': node.mac, class: 'ut-node' + (selected ? ' ut-selected' : '')});
+            group.append(this.svg('rect', {width: 220, height: 96, rx: 12, class: 'ut-node-bg', stroke: status.color, 'stroke-width': status.severity >= 0 ? 4 : 2}));
             group.append(this.svg('circle', {cx: 19, cy: 24, r: 5, fill: status.color}));
-            group.append(this.svg('text', {x: 32, y: 29, class: 'ut-node-name'}, this.short(node.name, 20)));
-            group.append(this.svg('text', {x: 14, y: 49, class: 'ut-node-model'}, (node.manual ? 'Manuell ergänzt' : node.wireless ? 'Access Point' : 'Netzwerkgerät') + (node.model ? ' · ' + node.model : '')));
-            group.append(this.svg('text', {x: 14, y: 72, class: 'ut-node-status'}, status.label));
+            group.append(this.svg('text', {x: 32, y: 29, class: 'ut-node-name'}, this.short(node.name, node.traffic ? 11 : 22)));
+            group.append(this.svg('text', {x: 14, y: 55, class: 'ut-node-model'}, (node.manual ? 'Manuell ergänzt' : node.wireless ? 'Access Point' : 'Netzwerkgerät') + (node.model ? ' · ' + node.model : '')));
+            group.append(this.svg('text', {x: 14, y: 80, class: 'ut-node-status'}, status.label));
             group.append(this.svg('title', {}, node.name + '\n' + node.mac + '\n' + status.label + '\n' + (node.host_name || node.mapping)));
+            const traffic = this._miniTraffic(node);
+            if (traffic) group.append(traffic);
             const activate = () => {
                 this.selected = this.selected === node.mac ? null : node.mac;
                 this.render();
@@ -214,6 +402,14 @@ class UniFiTopologyView {
         title.append(this.button('Schließen', () => { this.selected = null; this.render(); }));
         panel.append(title, this.el('p', (node.manual ? 'Manuelle ID: ' + node.mac.slice(7) : node.mac) + (node.hostid ? ' · Zabbix-Host ' + node.hostid + ': ' + node.host_name : ' · ' + node.mapping), 'ut-meta'));
         if (node.hostid) panel.append(this.el('p', node.mapping + (node.maintenance ? ' · Wartung aktiv' : ''), 'ut-meta'));
+        if (node.traffic) {
+            const trafficSummary = this.el('div', null, 'ut-traffic-summary');
+            trafficSummary.append(
+                this.el('span', 'RX ' + this._formatBits(node.traffic.rx?.latest) + ' · TX ' + this._formatBits(node.traffic.tx?.latest)),
+                this.button('Traffic vergrößern', () => this._openTraffic(node))
+            );
+            panel.append(trafficSummary);
+        }
         panel.append(this.el('h4', 'Probleme'));
         if (this.expired) panel.append(this.el('p', 'Problemstatus ist veraltet.'));
         if (!node.problems.length) panel.append(this.el('p', node.hostid && node.monitored ? 'Keine offenen, für dich sichtbaren Probleme im gewählten Filter.' : 'Kein aktiver, eindeutig zugeordneter Zabbix-Host. Status unbekannt.'));
@@ -272,13 +468,23 @@ class CWidgetUniFiTopology extends CWidget {
     onDeactivate() {
         clearInterval(this._utTimer);
         this._utTimer = null;
+        this._utView?._closeTraffic();
     }
     onDestroy() {
         this.onDeactivate();
         this._utView = null;
     }
     onClearContents() {
+        this._utView?._closeTraffic();
         this._utView = null;
+    }
+    onFeedback({type, value}) {
+        if (type === CWidgetsData.DATA_TYPE_TIME_PERIOD && this.getFieldsReferredData().has('time_period')) {
+            this._startUpdating();
+            this.feedback({time_period: value});
+            return true;
+        }
+        return false;
     }
     setContents(response) {
         if (!this._utView || !this._body.contains(this._utView.root)) {

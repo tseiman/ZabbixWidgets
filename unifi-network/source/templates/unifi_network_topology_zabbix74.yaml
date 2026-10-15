@@ -7,10 +7,10 @@ zabbix_export:
   - uuid: dce62fc5d72144028ac50926dff3e713
     template: UniFi Network Topology
     name: UniFi Network Topology
-    description: Standalone, read-only UniFi topology collection for site default.
-      Link alongside the existing UniFi Network API template on the controller host.
-      Uses existing host macros; does not define or override them. No discovery, device
-      changes or map creation. TLS certificate and hostname verification are enabled.
+    description: Standalone, read-only UniFi topology and per-device traffic collection for site default. Link alongside the
+      existing UniFi Network API template on the controller host. Uses existing host macros; does not define or override them.
+      Discovers switches and access points only to create aggregate RX/TX items; it does not change devices or create maps.
+      TLS certificate and hostname verification are enabled.
     groups:
     - name: Templates/UniFi Topology
     items:
@@ -22,8 +22,8 @@ zabbix_export:
       history: 1d
       value_type: TEXT
       trends: '0'
-      description: Read-only topology for site default. Uses existing host macros.
-        Internal UniFi endpoint; response schema may change.
+      description: Read-only topology for site default. Uses existing host macros. Internal UniFi endpoint; response schema
+        may change.
       timeout: 15s
       url: https://{$UNIFI_NETWORK_API_ADDRESS}/proxy/network/v2/api/site/default/topology
       status_codes: '200'
@@ -65,9 +65,8 @@ zabbix_export:
       history: 30d
       value_type: UNSIGNED
       trends: 365d
-      description: Number of entries in vertices; includes all types returned by UniFi.
-        Not an online/health indicator. Missing or invalid data is not replaced by
-        zero.
+      description: Number of entries in vertices; includes all types returned by UniFi. Not an online/health indicator. Missing
+        or invalid data is not replaced by zero.
       preprocessing:
       - type: JSONPATH
         parameters:
@@ -103,9 +102,8 @@ zabbix_export:
       history: 30d
       value_type: UNSIGNED
       trends: 365d
-      description: Number of entries in edges; includes all types returned by UniFi.
-        Not an online/health indicator. Missing or invalid data is not replaced by
-        zero.
+      description: Number of entries in edges; includes all types returned by UniFi. Not an online/health indicator. Missing
+        or invalid data is not replaced by zero.
       preprocessing:
       - type: JSONPATH
         parameters:
@@ -115,3 +113,343 @@ zabbix_export:
       tags:
       - tag: component
         value: topology
+    - uuid: 7f41966fe4cd490881db9a11c763bd7b
+      name: 'UniFi devices: Raw JSON'
+      type: HTTP_AGENT
+      key: unifi.devices.json
+      delay: 1m
+      history: 1h
+      value_type: TEXT
+      trends: '0'
+      description: Read-only device statistics for site default. Supplies per-port rates and counters for switch and access-point
+        traffic items. Uses an internal UniFi Network endpoint whose response schema may change.
+      timeout: 15s
+      url: https://{$UNIFI_NETWORK_API_ADDRESS}/proxy/network/api/s/default/stat/device
+      status_codes: '200'
+      follow_redirects: 'NO'
+      headers:
+      - name: X-API-Key
+        value: '{$UNIFI_NETWORK_API_KEY}'
+      retrieve_mode: BODY
+      request_method: GET
+      output_format: RAW
+      verify_peer: 'YES'
+      verify_host: 'YES'
+      tags:
+      - tag: component
+        value: topology-traffic
+    discovery_rules:
+    - uuid: f55d7a4f02d44cf89c03c26eed854b32
+      name: 'UniFi devices: Switch and access point discovery'
+      type: DEPENDENT
+      key: unifi.device.discovery
+      lifetime: 30d
+      description: Discovers switches (usw) and access points (uap) with valid MAC addresses from the UniFi device statistics
+        response.
+      preprocessing:
+      - type: JAVASCRIPT
+        parameters:
+        - |-
+          var root = JSON.parse(value);
+          var devices = Array.isArray(root) ? root : root.data;
+          if (!Array.isArray(devices)) {
+              throw 'UniFi device response has no data array.';
+          }
+          var seen = {};
+          var result = [];
+          devices.forEach(function (device) {
+              var type = String(device.type || '').toLowerCase();
+              var mac = String(device.mac || '').toLowerCase().replace(/-/g, ':');
+              if ((type !== 'usw' && type !== 'uap')
+                      || !/^(?:[0-9a-f]{2}:){5}[0-9a-f]{2}$/.test(mac) || seen[mac]) {
+                  return;
+              }
+              seen[mac] = true;
+              result.push({
+                  '{#UNIFI.MAC}': mac,
+                  '{#UNIFI.NAME}': String(device.name || mac),
+                  '{#UNIFI.TYPE}': type
+              });
+          });
+          return JSON.stringify(result);
+      master_item:
+        key: unifi.devices.json
+      item_prototypes:
+      - uuid: 82f7b959221343e586ff88d0d46aa425
+        name: 'UniFi device [{#UNIFI.NAME}]: RX direct rate'
+        type: DEPENDENT
+        key: unifi.device.rx.rate.bps[{#UNIFI.MAC}]
+        history: 30d
+        value_type: FLOAT
+        trends: 365d
+        units: bps
+        description: Sum of rx_bytes-r across unique physical ports, converted from bytes per second to bits per second. For
+          an AP without usable port_table rates, the physical uplink rate is used. LAG/bond pseudo-interfaces and duplicate
+          port indexes are excluded.
+        preprocessing:
+        - type: JAVASCRIPT
+          parameters:
+          - |-
+            var wanted = '{#UNIFI.MAC}'.toLowerCase();
+            var root = JSON.parse(value);
+            var devices = Array.isArray(root) ? root : root.data;
+            if (!Array.isArray(devices)) throw 'UniFi device response has no data array.';
+            var device = devices.filter(function (row) {
+                return String(row.mac || '').toLowerCase().replace(/-/g, ':') === wanted;
+            })[0];
+            if (!device) throw 'Discovered UniFi device is absent from the response.';
+            function number(object, key) {
+                var n = object && object[key] !== '' && object[key] !== null
+                    ? Number(object[key]) : NaN;
+                return isFinite(n) && n >= 0 ? n : null;
+            }
+            function physical(port) {
+                var index = Number(port.port_idx !== undefined ? port.port_idx : port.num_port);
+                var type = String(port.type || '').toLowerCase();
+                var ifname = String(port.ifname || '').toLowerCase();
+                return isFinite(index) && index >= 1
+                    && !/(^|[-_])(lag|bond|aggregate)([-_]|$)/.test(type)
+                    && !/^(lag|bond)/.test(ifname);
+            }
+            var seen = {}, sum = 0, count = 0;
+            (Array.isArray(device.port_table) ? device.port_table : []).forEach(function (port) {
+                if (!physical(port)) return;
+                var index = String(Number(port.port_idx !== undefined ? port.port_idx : port.num_port));
+                if (seen[index]) return;
+                seen[index] = true;
+                var n = number(port, 'rx_bytes-r');
+                if (n !== null) { sum += n; count++; }
+            });
+            if (!count && String(device.type || '').toLowerCase() === 'uap') {
+                var uplink = number(device.uplink, 'rx_bytes-r');
+                if (uplink !== null) { sum = uplink; count = 1; }
+            }
+            if (!count) throw 'No physical-port RX rate is available.';
+            return sum * 8;
+          error_handler: DISCARD_VALUE
+        master_item:
+          key: unifi.devices.json
+        tags:
+        - tag: component
+          value: topology-traffic
+        - tag: direction
+          value: rx
+      - uuid: d528628a48ed41a18abb2abc5de63a1d
+        name: 'UniFi device [{#UNIFI.NAME}]: RX byte counter'
+        type: DEPENDENT
+        key: unifi.device.rx.counter.bytes[{#UNIFI.MAC}]
+        history: 1h
+        value_type: UNSIGNED
+        trends: '0'
+        units: B
+        description: Sum of cumulative RX byte counters across unique physical ports. Used only as the source for the rate
+          fallback when rx_bytes-r is absent.
+        preprocessing:
+        - type: JAVASCRIPT
+          parameters:
+          - |-
+            var wanted = '{#UNIFI.MAC}'.toLowerCase();
+            var root = JSON.parse(value);
+            var devices = Array.isArray(root) ? root : root.data;
+            if (!Array.isArray(devices)) throw 'UniFi device response has no data array.';
+            var device = devices.filter(function (row) {
+                return String(row.mac || '').toLowerCase().replace(/-/g, ':') === wanted;
+            })[0];
+            if (!device) throw 'Discovered UniFi device is absent from the response.';
+            function number(object, key) {
+                var n = object && object[key] !== '' && object[key] !== null
+                    ? Number(object[key]) : NaN;
+                return isFinite(n) && n >= 0 ? n : null;
+            }
+            function physical(port) {
+                var index = Number(port.port_idx !== undefined ? port.port_idx : port.num_port);
+                var type = String(port.type || '').toLowerCase();
+                var ifname = String(port.ifname || '').toLowerCase();
+                return isFinite(index) && index >= 1
+                    && !/(^|[-_])(lag|bond|aggregate)([-_]|$)/.test(type)
+                    && !/^(lag|bond)/.test(ifname);
+            }
+            var seen = {}, sum = 0, count = 0;
+            (Array.isArray(device.port_table) ? device.port_table : []).forEach(function (port) {
+                if (!physical(port)) return;
+                var index = String(Number(port.port_idx !== undefined ? port.port_idx : port.num_port));
+                if (seen[index]) return;
+                seen[index] = true;
+                var n = number(port, 'rx_bytes');
+                if (n !== null) { sum += n; count++; }
+            });
+            if (!count && String(device.type || '').toLowerCase() === 'uap') {
+                var uplink = number(device.uplink, 'rx_bytes');
+                if (uplink !== null) { sum = uplink; count = 1; }
+            }
+            if (!count) throw 'No physical-port RX counter is available.';
+            return sum;
+          error_handler: DISCARD_VALUE
+        master_item:
+          key: unifi.devices.json
+        tags:
+        - tag: component
+          value: topology-traffic
+        - tag: direction
+          value: rx
+      - uuid: d6391ff219974746b4e75d2a6d690d2d
+        name: 'UniFi device [{#UNIFI.NAME}]: TX direct rate'
+        type: DEPENDENT
+        key: unifi.device.tx.rate.bps[{#UNIFI.MAC}]
+        history: 30d
+        value_type: FLOAT
+        trends: 365d
+        units: bps
+        description: Sum of tx_bytes-r across unique physical ports, converted from bytes per second to bits per second. For
+          an AP without usable port_table rates, the physical uplink rate is used. LAG/bond pseudo-interfaces and duplicate
+          port indexes are excluded.
+        preprocessing:
+        - type: JAVASCRIPT
+          parameters:
+          - |-
+            var wanted = '{#UNIFI.MAC}'.toLowerCase();
+            var root = JSON.parse(value);
+            var devices = Array.isArray(root) ? root : root.data;
+            if (!Array.isArray(devices)) throw 'UniFi device response has no data array.';
+            var device = devices.filter(function (row) {
+                return String(row.mac || '').toLowerCase().replace(/-/g, ':') === wanted;
+            })[0];
+            if (!device) throw 'Discovered UniFi device is absent from the response.';
+            function number(object, key) {
+                var n = object && object[key] !== '' && object[key] !== null
+                    ? Number(object[key]) : NaN;
+                return isFinite(n) && n >= 0 ? n : null;
+            }
+            function physical(port) {
+                var index = Number(port.port_idx !== undefined ? port.port_idx : port.num_port);
+                var type = String(port.type || '').toLowerCase();
+                var ifname = String(port.ifname || '').toLowerCase();
+                return isFinite(index) && index >= 1
+                    && !/(^|[-_])(lag|bond|aggregate)([-_]|$)/.test(type)
+                    && !/^(lag|bond)/.test(ifname);
+            }
+            var seen = {}, sum = 0, count = 0;
+            (Array.isArray(device.port_table) ? device.port_table : []).forEach(function (port) {
+                if (!physical(port)) return;
+                var index = String(Number(port.port_idx !== undefined ? port.port_idx : port.num_port));
+                if (seen[index]) return;
+                seen[index] = true;
+                var n = number(port, 'tx_bytes-r');
+                if (n !== null) { sum += n; count++; }
+            });
+            if (!count && String(device.type || '').toLowerCase() === 'uap') {
+                var uplink = number(device.uplink, 'tx_bytes-r');
+                if (uplink !== null) { sum = uplink; count = 1; }
+            }
+            if (!count) throw 'No physical-port TX rate is available.';
+            return sum * 8;
+          error_handler: DISCARD_VALUE
+        master_item:
+          key: unifi.devices.json
+        tags:
+        - tag: component
+          value: topology-traffic
+        - tag: direction
+          value: tx
+      - uuid: 7c165b00f8b440c698c7559ff659001b
+        name: 'UniFi device [{#UNIFI.NAME}]: TX byte counter'
+        type: DEPENDENT
+        key: unifi.device.tx.counter.bytes[{#UNIFI.MAC}]
+        history: 1h
+        value_type: UNSIGNED
+        trends: '0'
+        units: B
+        description: Sum of cumulative TX byte counters across unique physical ports. Used only as the source for the rate
+          fallback when tx_bytes-r is absent.
+        preprocessing:
+        - type: JAVASCRIPT
+          parameters:
+          - |-
+            var wanted = '{#UNIFI.MAC}'.toLowerCase();
+            var root = JSON.parse(value);
+            var devices = Array.isArray(root) ? root : root.data;
+            if (!Array.isArray(devices)) throw 'UniFi device response has no data array.';
+            var device = devices.filter(function (row) {
+                return String(row.mac || '').toLowerCase().replace(/-/g, ':') === wanted;
+            })[0];
+            if (!device) throw 'Discovered UniFi device is absent from the response.';
+            function number(object, key) {
+                var n = object && object[key] !== '' && object[key] !== null
+                    ? Number(object[key]) : NaN;
+                return isFinite(n) && n >= 0 ? n : null;
+            }
+            function physical(port) {
+                var index = Number(port.port_idx !== undefined ? port.port_idx : port.num_port);
+                var type = String(port.type || '').toLowerCase();
+                var ifname = String(port.ifname || '').toLowerCase();
+                return isFinite(index) && index >= 1
+                    && !/(^|[-_])(lag|bond|aggregate)([-_]|$)/.test(type)
+                    && !/^(lag|bond)/.test(ifname);
+            }
+            var seen = {}, sum = 0, count = 0;
+            (Array.isArray(device.port_table) ? device.port_table : []).forEach(function (port) {
+                if (!physical(port)) return;
+                var index = String(Number(port.port_idx !== undefined ? port.port_idx : port.num_port));
+                if (seen[index]) return;
+                seen[index] = true;
+                var n = number(port, 'tx_bytes');
+                if (n !== null) { sum += n; count++; }
+            });
+            if (!count && String(device.type || '').toLowerCase() === 'uap') {
+                var uplink = number(device.uplink, 'tx_bytes');
+                if (uplink !== null) { sum = uplink; count = 1; }
+            }
+            if (!count) throw 'No physical-port TX counter is available.';
+            return sum;
+          error_handler: DISCARD_VALUE
+        master_item:
+          key: unifi.devices.json
+        tags:
+        - tag: component
+          value: topology-traffic
+        - tag: direction
+          value: tx
+      - uuid: d87e7ef159cb40248eaddbb48f5c0fd2
+        name: 'UniFi device [{#UNIFI.NAME}]: RX counter-derived rate'
+        type: DEPENDENT
+        key: unifi.device.rx.counter.bps[{#UNIFI.MAC}]
+        history: 30d
+        value_type: FLOAT
+        trends: 365d
+        units: bps
+        description: Fallback RX rate calculated from changes in the summed physical-port byte counters. The widget prefers
+          the direct rate item when available.
+        preprocessing:
+        - type: CHANGE_PER_SECOND
+        - type: MULTIPLIER
+          parameters:
+          - '8'
+        master_item:
+          key: unifi.device.rx.counter.bytes[{#UNIFI.MAC}]
+        tags:
+        - tag: component
+          value: topology-traffic
+        - tag: direction
+          value: rx
+      - uuid: 6102937c73774b269eb9ad084deb7428
+        name: 'UniFi device [{#UNIFI.NAME}]: TX counter-derived rate'
+        type: DEPENDENT
+        key: unifi.device.tx.counter.bps[{#UNIFI.MAC}]
+        history: 30d
+        value_type: FLOAT
+        trends: 365d
+        units: bps
+        description: Fallback TX rate calculated from changes in the summed physical-port byte counters. The widget prefers
+          the direct rate item when available.
+        preprocessing:
+        - type: CHANGE_PER_SECOND
+        - type: MULTIPLIER
+          parameters:
+          - '8'
+        master_item:
+          key: unifi.device.tx.counter.bytes[{#UNIFI.MAC}]
+        tags:
+        - tag: component
+          value: topology-traffic
+        - tag: direction
+          value: tx

@@ -1,12 +1,18 @@
 # UniFi Topologie – Dashboard-Widget für Zabbix 7.4
 
-Version 0.2.0 · Mit konfigurierbaren manuellen Geräten und Verbindungen
+Version 0.3.0 · Mit RX/TX-Verlauf, konfigurierbaren manuellen Geräten und Verbindungen
 
-Das Widget liest das vorhandene Text-Item „UniFi topology: Raw JSON“ und zeichnet die Netzwerkgeräte. Ein Klick auf einen Knoten öffnet dessen Endgeräte, Netzwerkverbindungen und Zabbix-Probleme. Es schreibt keine Maps, Hosts, Items oder Trigger und ruft UniFi nicht zusätzlich ab.
+Das Widget liest das Text-Item „UniFi topology: Raw JSON“ und zeichnet die Netzwerkgeräte. Die Zabbix-History der vom mitgelieferten Template entdeckten Traffic-Items liefert kleine RX/TX-Diagramme und einen vergrößerbaren Dialog. Ein Klick auf den übrigen Knoten öffnet dessen Endgeräte, Netzwerkverbindungen und Zabbix-Probleme. Das Frontend schreibt keine Maps, Hosts, Items oder Trigger und ruft UniFi nicht direkt ab.
 
-## Neu in 0.2.0
+## Neu in 0.3.0
 
-Zwei optionale Felder im Widget erlauben zusätzliche Geräte und manuelle Verbindungen. Sie sind pro Widget konfigurierbar, ohne feste Hersteller- oder Netzvorgaben. Syntax, Beispiele und Update-Anleitung stehen in MANUAL_TOPOLOGY.md.
+- Jeder Switch und Access Point mit gesammelten Daten erhält rechts oben einen RX/TX-Mini-Graphen.
+- Klick sowie Enter/Leertaste öffnen einen automatisch skalierten Dialog im Stil der Zabbix-Overlays.
+- Mini- und Großdiagramm folgen standardmäßig dem Zeitraum des Dashboards.
+- Das aktualisierte Template erfasst direkte Port-Raten und eine aus Byte-Zählern berechnete Ausweichserie.
+- Es werden keine externen JavaScript-Bibliotheken oder Browser-Anfragen an UniFi verwendet.
+
+Die in 0.2.0 eingeführten optionalen manuellen Geräte und Verbindungen bleiben unverändert verfügbar. Syntax und Beispiele stehen in `MANUAL_TOPOLOGY.md`.
 
 ## Installation
 
@@ -17,14 +23,20 @@ Das ZIP enthält genau den Ordner `unifi_topology`. Dieser gehört in das vorhan
 3. Als Zabbix-Super-Admin **Administration → General → Modules → Scan directory** öffnen.
 4. **UniFi Topologie** aktivieren.
 5. Dashboard neu laden, bearbeiten und ein Widget vom Typ **UniFi Topologie** hinzufügen.
-6. Als **Topologie-Master-Item** auf dem Controller-Host `unifi.tsei.mdn` das Item **UniFi topology: Raw JSON** auswählen.
+6. Als **Topologie-Master-Item** auf dem Controller-Host das Item **UniFi topology: Raw JSON** auswählen.
 7. Aktualisierungsintervall auf **1 Minute** einstellen und Dashboard speichern.
 
 Ein typischer Frontend-Pfad ist `/usr/share/zabbix` oder `/usr/share/zabbix/ui`; je nach Paket und Installation kann er anders heißen. Es muss der Ordner des tatsächlich ausgelieferten Webfrontends sein. Bei Docker den Modulordner dauerhaft in das `modules`-Verzeichnis des Frontend-Containers einbinden; eine Kopie nur in den laufenden Container überlebt dessen Neuerstellung nicht.
 
 Die Dateien müssen für den Webserver lesbar sein (typisch Dateien 0644, Ordner 0755), aber nicht durch ihn beschreibbar. Kein Neustart des Zabbix-Servers und kein zusätzlicher API-Token sind erforderlich. Falls PHP OPcache Änderungen nicht übernimmt, dessen Cache über das normale Administrationsverfahren aktualisieren.
 
-Das Community-Template und das neue Topologie-Template bleiben unverändert. Es handelt sich um ein Frontend-Modul, nicht um einen YAML-Import.
+Version 0.3.0 benötigt zusätzlich den Import von `source/templates/unifi_network_topology_zabbix74.yaml`. Das Template muss auf demselben Controller-Host liegen wie das ausgewählte Topologie-Master-Item. Die LLD erzeugt RX/TX-Items für `usw` und `uap`; erst nach den ersten Werten erscheinen Diagramme.
+
+## Traffic-Diagramme
+
+Blau zeigt RX, grün TX. Bevorzugt werden `rx_bytes-r` und `tx_bytes-r` jedes eindeutigen physischen Ports summiert und von Byte/s in bit/s umgerechnet. Fehlen diese Werte, verwendet Zabbix die Änderung pro Sekunde der summierten `rx_bytes`- beziehungsweise `tx_bytes`-Zähler. Logische LAG-, Bond- und Aggregate-Interfaces sowie doppelte Portindizes werden nicht zusätzlich gezählt. Bei Access Points ohne nutzbare `port_table` dient der einzelne physische `uplink` als Ausweichquelle.
+
+Das Feld **Traffic-Zeitraum** verweist standardmäßig auf den Dashboard-Zeitraum. Das Backend nutzt begrenzte Zabbix-History-/Trend-Aggregate mit maximal 320 Punkten je zugrunde liegendem Item. Manuell ergänzte Geräte und Geräte ohne passende History zeigen keinen erfundenen Graphen.
 
 ## Verbindung zwischen Topologiegerät und Zabbix-Host
 
@@ -83,7 +95,7 @@ Die Auswahl basiert bewusst auf `type=DEVICE`, nicht auf `unifiDevice`: Das Beis
 
 ## Aktualität und Grenzen
 
-Das Widget aktualisiert sich, solange die Dashboard-Seite aktiv ist. Der aktuelle Problemstatus wird bei jedem Refresh neu gelesen. Die Topologie stammt aus dem letzten gespeicherten Master-Item-Wert.
+Das Widget aktualisiert sich, solange die Dashboard-Seite aktiv ist. Der aktuelle Problemstatus wird bei jedem Refresh neu gelesen. Die Topologie stammt aus dem letzten gespeicherten Master-Item-Wert. Eine Änderung des Dashboard-Zeitraums stößt eine neue Traffic-Abfrage an.
 
 Standardmäßig werden Topologiedaten nach 300 Sekunden als veraltet markiert. Bei einem deaktivierten oder nicht unterstützten Quell-Item erscheint ebenfalls ein Hinweis. Datum der Topologie und Zeitpunkt der Problemabfrage stehen unten. Wird der Problemstatus länger als die konfigurierte Altersgrenze nicht aktualisiert, werden die Knoten grau. Ein erneuter erfolgreicher Refresh stellt den aktuellen Zustand wieder her.
 
@@ -95,12 +107,11 @@ Grenzen pro Antwort: 1000 Knoten, 3000 Kanten, 2000 offene Probleme. Überschrei
 
 ## Teststand
 
-- PHP-Dateien unter PHP 8.5 (isolierte WebAssembly-Testumgebung) syntaktisch geprüft; zusätzlich PHP-8.0-Syntaxprüfung.
-- Backend mit simulierten Zabbix-API-Antworten getestet: Host-Zuordnung, Mehrdeutigkeit, Warning, Bestätigung, Behebung, Unterdrückung, ungültige Daten, fehlende Hosts und Fehler.
-- Darstellung und Klick-/Tastaturbedienung mit vollständigem älteren UniFi-Beispiel im Browser geprüft.
-- Automatisierte DOM-Tests: höchste Schwere, benutzerdefinierte Farbe, Behebung, unbekannter/veralteter Status, Escaping, Zoom und Zyklen.
-- Die Schnittstellen wurden mit dem offiziellen Zabbix-Quellzweig `release/7.4` abgeglichen.
-- **Noch kein Live-Integrationstest gegen deine Zabbix-Installation.** Die endgültige Prüfung erfolgt nach Modulaktivierung und Auswahl des echten Items.
+- Template-, LLD- und Port-Summenlogik werden mit automatisierten Regressionstests geprüft, einschließlich doppelter Portindizes, logischer LAG-Interfaces und AP-Uplink-Fallback.
+- JavaScript-Syntax und die PHP-Syntaxstruktur aller Moduldateien wurden automatisiert geprüft.
+- Mini-Diagramme, Skalierung, Overlay, Beschriftungen und Hellmodus wurden mit Firefox in einem datenschutzneutralen Browser-Harness visuell geprüft.
+- Zeitbereich, History-Aggregation und Widget-Feldklassen wurden mit dem offiziellen Zabbix-Quellzweig `release/7.4` abgeglichen.
+- **Es gibt noch keinen Live-Integrationstest gegen die produktive Zabbix-/UniFi-Installation.** Die endgültige Prüfung erfolgt nach Template-Import und Modulaktivierung.
 
 Die separate HTML-Vorschau enthält einen älteren Topologie-Schnappschuss und ein simuliertes switch3-Warning. Sie läuft ohne Verbindung zu Zabbix. Ihre beispielhaften Host-IDs sind keine Konfiguration für dein System. Das installierbare ZIP enthält weder diesen Schnappschuss noch API-Schlüssel.
 
@@ -113,6 +124,8 @@ Die separate HTML-Vorschau enthält einen älteren Topologie-Schnappschuss und e
 5. Öffnet der Problem-Link das richtige Ereignis?
 6. Werden bei einem AP die erwarteten WLAN-Clients angezeigt?
 7. Nach normaler Behebung eines Problems: verschwindet es auch im Widget beim nächsten Refresh?
+8. Haben alle erwarteten Switches und Access Points einen Mini-Graphen?
+9. Folgt der große RX/TX-Dialog nach einer Änderung dem Dashboard-Zeitraum?
 
 Keine Alarme absichtlich auslösen; vorhandene Probleme und ihre normale Behebung verwenden.
 

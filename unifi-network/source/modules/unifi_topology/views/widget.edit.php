@@ -1,6 +1,7 @@
 <?php
 (new CWidgetFormView($data))
     ->addField((new CWidgetFieldMultiSelectItemView($data['fields']['itemid']))->setPopupParameter('value_types', [ITEM_VALUE_TYPE_TEXT]))
+    ->addField((new CWidgetFieldTimePeriodView($data['fields']['time_period']))->setDateFormat(ZBX_FULL_DATE_TIME))
     ->addField(new CWidgetFieldTextBoxView($data['fields']['host_pattern']))
     ->addField(new CWidgetFieldTextAreaView($data['fields']['bindings']))
     ->addField(new CWidgetFieldTextAreaView($data['fields']['manual_nodes']))

@@ -108,7 +108,7 @@ class Topology {
             throw new InvalidArgumentException('Bitte das Item UniFi topology: Raw JSON auswaehlen.');
         }
         $items = $this->result(API::Item()->get([
-            'output' => ['itemid', 'value_type', 'key_', 'status', 'state'],
+            'output' => ['itemid', 'hostid', 'value_type', 'key_', 'status', 'state'],
             'itemids' => $itemids,
             'webitems' => true
         ]));
@@ -266,6 +266,14 @@ class Topology {
         for ($i = 0; $i <= 5; $i++) {
             $severities[] = ['name' => CSeverityHelper::getName($i), 'color' => '#'.CSeverityHelper::getColor($i)];
         }
+        $traffic_period = Traffic::load(
+            $nodes,
+            (string) $items[0]['hostid'],
+            $fields['time_period'] ?? ['from' => 'now-1h', 'to' => 'now']
+        );
+        if ($traffic_period['items'] === 0) {
+            $warnings[] = 'Keine Traffic-Items gefunden. Das aktualisierte UniFi-Template importieren und die Discovery abwarten.';
+        }
         return [
             'nodes' => array_values($nodes),
             'edges' => $edges,
@@ -275,7 +283,8 @@ class Topology {
             'checked_at' => time(),
             'max_age' => $max_age,
             'stale' => $stale,
-            'show_suppressed' => !empty($fields['show_suppressed'])
+            'show_suppressed' => !empty($fields['show_suppressed']),
+            'traffic_period' => ['from' => $traffic_period['from'], 'to' => $traffic_period['to']]
         ];
     }
 }

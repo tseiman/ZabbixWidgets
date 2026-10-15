@@ -1,8 +1,8 @@
 # UniFi Network Topology for Zabbix
 
-A read-only Zabbix 7.4 dashboard widget that visualizes a UniFi Network topology, links network devices to Zabbix hosts, and overlays the current Zabbix problem severity. The accompanying template collects the required topology JSON from the UniFi controller.
+A read-only Zabbix 7.4 dashboard widget that visualizes a UniFi Network topology, links network devices to Zabbix hosts, overlays the current Zabbix problem severity, and shows per-device RX/TX traffic history. The accompanying template collects both topology and per-port device statistics from the UniFi controller.
 
-This directory contains the unmodified **UniFi Topologie 0.2.0** frontend module and the supplied **Zabbix 7.4** topology template.
+This directory contains **UniFi Topologie 0.3.0** and its **Zabbix 7.4** template. Version 0.3.0 extends the originally imported 0.2.0 package with bounded historical traffic charts and the required traffic items.
 
 ## Contents
 
@@ -13,6 +13,7 @@ This directory contains the unmodified **UniFi Topologie 0.2.0** frontend module
 - [Install the topology template](#install-the-topology-template)
 - [Install the frontend module](#install-the-frontend-module)
 - [Configure the widget](#configure-the-widget)
+- [Traffic charts and data](#traffic-charts-and-data)
 - [Host mapping](#host-mapping)
 - [Manual devices and connections](#manual-devices-and-connections)
 - [Status and problem colors](#status-and-problem-colors)
@@ -27,6 +28,8 @@ This directory contains the unmodified **UniFi Topologie 0.2.0** frontend module
 - Draws UniFi entries with `type=DEVICE` as network nodes.
 - Displays automatic wired and wireless connections from the UniFi topology response.
 - Shows port numbers, link rates, SSIDs, channels, and experience values when UniFi supplies them.
+- Shows a compact RX/TX chart on every discovered switch or access point for which traffic history is available.
+- Opens an accessible, automatically scaled RX/TX chart dialog using the current dashboard time period.
 - Expands a selected device to show directly attached clients, network links, and open Zabbix problems.
 - Uses Zabbix's configured severity names and colors.
 - Supports exact automatic host-name mapping and explicit MAC-to-host-ID mapping.
@@ -35,7 +38,7 @@ This directory contains the unmodified **UniFi Topologie 0.2.0** frontend module
 - Performs no direct browser-to-UniFi requests and uses no external JavaScript libraries or CDNs.
 - Does not create or modify Zabbix maps, hosts, items, triggers, or UniFi configuration.
 
-The module reads the latest value of the selected `UniFi topology: Raw JSON` text item. Problem and host information is queried through the current frontend user's Zabbix API context.
+The module reads the latest value of the selected `UniFi topology: Raw JSON` text item. Problem, host, traffic-item, history, and trend information is queried through the current frontend user's Zabbix API context. Chart data is reduced to at most 320 points per underlying item before it reaches the browser.
 
 ## Screenshot
 
@@ -57,7 +60,7 @@ The module reads the latest value of the selected `UniFi topology: Raw JSON` tex
 - A TLS certificate trusted by the responsible Zabbix server or proxy and matching the configured controller name.
 - Read access for dashboard users to the topology item and to any Zabbix hosts whose problem status should be displayed.
 
-The supplied template uses the UniFi site name `default` in its request URL. Change management for another site would require a deliberate template modification and is outside this preserved package.
+The supplied template uses the UniFi site name `default` in both request URLs. For another site, change `/site/default/` and `/s/default/` in the two HTTP-agent items before linking the template, then review the import diff deliberately.
 
 ## Repository layout
 
@@ -65,9 +68,10 @@ The supplied template uses the UniFi site name `default` in its request URL. Cha
 unifi-network/
 ├── README.md
 ├── assets/                                  # README screenshots
+├── tests/                                   # Template and widget regression tests
 └── source/
     ├── docs/original/                     # Supplied external Markdown documents
-    ├── modules/unifi_topology/            # Unmodified installable widget 0.2.0
+    ├── modules/unifi_topology/            # Installable widget 0.3.0
     │   ├── actions/
     │   ├── assets/
     │   ├── includes/
@@ -83,7 +87,7 @@ unifi-network/
 
 The supplied standalone HTML previews are intentionally not included because they embed a historical topology snapshot with device names and MAC addresses. The nested ZIP is also omitted because its unchanged contents are available directly below `source/modules/unifi_topology/`.
 
-The external `source/docs/original/UniFi_Topologie_Installation.md` describes the older 0.1.0 module. For version 0.2.0 behavior, use this guide and the preserved `source/modules/unifi_topology/README.md` and `MANUAL_TOPOLOGY.md`.
+The files below `source/docs/original/` document older imported releases and are retained only as historical source material. Use this guide for version 0.3.0 installation and behavior.
 
 ## Install the topology template
 
@@ -100,11 +104,11 @@ In Zabbix:
 2. Import `unifi-network/source/templates/unifi_network_topology_zabbix74.yaml`.
 3. On the first import, allow creation of the template and the `Templates/UniFi Topology` template group.
 4. Keep **Delete missing** disabled.
-5. Review the import preview. It should contain the new template, its group, and five items only.
+5. Review the import preview. It should contain six regular items, one discovery rule, and six item prototypes.
 6. Link **UniFi Network Topology** to the existing UniFi controller host. Do not link it to every discovered UniFi device host.
 7. Check the effective `{$UNIFI_NETWORK_API_ADDRESS}` and `{$UNIFI_NETWORK_API_KEY}` values under inherited and host macros. The topology template deliberately does not define or override them.
-8. Run **Execute now** for `UniFi topology: Raw JSON`.
-9. Under **Monitoring → Latest data**, filter for `UniFi topology` and confirm that the raw JSON and four dependent items receive values.
+8. Run **Execute now** for both `UniFi topology: Raw JSON` and `UniFi devices: Raw JSON`.
+9. Wait for low-level discovery, then open **Monitoring → Latest data**. Confirm topology values and RX/TX items for the expected switches and access points.
 
 The template creates these items:
 
@@ -113,8 +117,13 @@ The template creates these items:
 - `unifi.topology.edges` — complete `edges` array as dependent text.
 - `unifi.topology.vertices.count` — number of all returned vertices.
 - `unifi.topology.edges.count` — number of all returned edges.
+- `unifi.devices.json` — HTTP-agent master item for `/proxy/network/api/s/default/stat/device`, queried every minute.
+- `unifi.device.discovery` — dependent low-level discovery for devices with UniFi types `usw` and `uap`.
+- `unifi.device.rx.rate.bps[MAC]` and `unifi.device.tx.rate.bps[MAC]` — preferred direct rates in bit/s.
+- `unifi.device.rx.counter.bytes[MAC]` and `unifi.device.tx.counter.bytes[MAC]` — short-lived aggregate byte counters used by the fallback.
+- `unifi.device.rx.counter.bps[MAC]` and `unifi.device.tx.counter.bps[MAC]` — rate fallback derived with change-per-second preprocessing.
 
-The dependent items do not cause additional controller requests. Vertex and edge counts are inventory counts, not reachability or health indicators.
+The dependent items do not cause additional controller requests. The template makes one topology request and one device-statistics request per minute. Vertex and edge counts are inventory counts, not reachability or health indicators.
 
 ## Install the frontend module
 
@@ -159,6 +168,7 @@ No Zabbix server restart and no additional API token are required. If an enabled
 Edit a dashboard and add **UniFi Topologie**. Configure:
 
 - **Topologie-Master-Item** — select `UniFi topology: Raw JSON` on the controller host.
+- **Traffic-Zeitraum** — keep **Dashboard** selected to follow the dashboard time selector; a custom period can be chosen per widget if required.
 - **Refresh interval** — normally one minute, matching the template item.
 - **Exact Zabbix host name with `{name}`** — mapping pattern described below.
 - **Optional mapping** — explicit `MAC=Host-ID` entries.
@@ -168,6 +178,23 @@ Edit a dashboard and add **UniFi Topologie**. Configure:
 - **Include suppressed problems** — disabled by default.
 
 The widget displays only topology nodes whose JSON `type` is `DEVICE` in the main graph. UniFi clients, including client-classified cameras, appear in the selected device's detail panel instead.
+
+## Traffic charts and data
+
+Each switch or access point with collected history receives a small chart in the upper-right corner of its topology node. Blue is RX and green is TX. Select the chart with a pointer, or focus it and press **Enter** or **Space**, to open the larger dialog. The dialog uses the same time period as the mini chart and automatically chooses a readable linear bit/s scale.
+
+The widget does not query UniFi from the browser. It resolves the traffic items on the same controller host as the selected topology master item, then uses Zabbix's history manager to retrieve bounded, pixel-width-aggregated data. Detailed history is used while retained; older dashboard periods use Zabbix trends. A direction with no data is omitted, and a node receives no chart until at least one direction has history.
+
+Traffic calculation rules:
+
+- Preferred value: `8 × sum(rx_bytes-r)` and `8 × sum(tx_bytes-r)` across unique physical ports.
+- Fallback: changes per second of the summed cumulative `rx_bytes` and `tx_bytes` counters, multiplied by eight.
+- A positive `port_idx` or `num_port` identifies a physical port. Duplicate indexes are counted once.
+- Interfaces identified as `lag`, `bond`, or `aggregate`, and interfaces named `lag*` or `bond*`, are excluded to avoid adding a logical aggregate to its member ports.
+- If an access point has no usable `port_table` value, its single physical `uplink` rate or counter is used.
+- Negative, missing, non-numeric, and otherwise unusable values are not converted into zero. Zabbix retains a gap instead.
+
+The chart is the sum of device-port traffic, not WAN utilization and not the sum of attached-client statistics. RX and TX are shown separately; the visual scale covers the larger of the two. Manually added nodes do not receive traffic charts because they have no matching discovered UniFi item.
 
 ## Host mapping
 
@@ -197,7 +224,7 @@ Replace the example with the real UniFi device MAC address and numeric Zabbix ho
 
 ## Manual devices and connections
 
-Version 0.2.0 can add non-UniFi or missing infrastructure to one widget without changing the source JSON or Zabbix objects.
+The widget can add non-UniFi or missing infrastructure to one dashboard without changing the source JSON or Zabbix objects.
 
 ### Additional devices
 
@@ -280,9 +307,9 @@ sudo cp -a unifi-network/source/modules/unifi_topology /usr/share/zabbix/ui/modu
 sudo chown -R root:root /usr/share/zabbix/ui/modules/unifi_topology
 ```
 
-Then scan the module directory in Zabbix and fully reload the dashboard. Keep the module directory name and module ID `unifi_topology`; existing master-item selection, mappings, manual topology, and refresh settings are stored with the dashboard widget.
+Then scan the module directory in Zabbix and fully reload the dashboard. Keep the module directory name and module ID `unifi_topology`; existing master-item selection, mappings, manual topology, and refresh settings are stored with the dashboard widget. Existing widgets receive the dashboard time period as the default traffic period.
 
-Import an updated topology template only when its release documentation requires it. Keep **Delete missing** disabled and review the import comparison before applying changes.
+**Version 0.3.0 requires the updated template.** Import `unifi_network_topology_zabbix74.yaml` with **Delete missing** disabled, review the comparison, and execute both HTTP-agent master items. The topology remains usable during low-level discovery, but traffic charts appear only after the new items have collected history.
 
 ## Operational limits
 
@@ -296,19 +323,23 @@ Import an updated topology template only when its release documentation requires
 - Template request interval: one minute.
 - Raw topology and dependent text history: one day.
 - Count history: 30 days; count trends: 365 days.
+- Raw device-statistics history: one hour.
+- Aggregate byte-counter history: one hour; no trends.
+- Direct and counter-derived traffic-rate history: 30 days; trends: 365 days.
+- Chart transfer limit: at most 320 aggregated points per underlying traffic item and dashboard refresh.
 
-The UniFi topology endpoint is internal and may change with controller updates. The template requires HTTP 200, rejects redirects, and verifies both TLS peer and host name. On collection failure, Zabbix retains the previous item values; always check timestamps when diagnosing stale data.
+The UniFi topology and device-statistics endpoints are internal and may change with controller updates. The template requires HTTP 200, rejects redirects, and verifies both TLS peer and host name. On collection failure, Zabbix retains previous item values; always check timestamps and item support state when diagnosing stale topology or chart gaps.
 
 If UniFi reports `has_unknown_switch=true`, the widget warns that intermediate devices may be missing. Manual additions do not prove that the automatic topology is complete.
 
 ## Security and permissions
 
-- The topology collection performs HTTPS `GET` requests only.
+- Topology and device-statistics collection performs HTTPS `GET` requests only.
 - Store `{$UNIFI_NETWORK_API_KEY}` as a secret host macro.
 - The browser does not receive or use the UniFi API key.
 - The widget performs no direct database queries and makes no direct browser-side requests to UniFi.
 - Host and problem lookups use the logged-in frontend user's Zabbix API permissions.
-- Users need read access to the topology item and each mapped host whose problems they should see.
+- Users need read access to the topology item, the controller host's traffic items, and each mapped host whose problems they should see.
 - Do not use disabled TLS verification as a permanent workaround. A successful `curl -k` request does not prove that Zabbix can validate the controller certificate.
 - No external CDN, JavaScript library, or additional service is used.
 
