@@ -2,7 +2,7 @@
 
 A read-only Zabbix 7.4 dashboard widget that visualizes a UniFi Network topology, links network devices to Zabbix hosts, overlays the current Zabbix problem severity, and shows per-device RX/TX traffic history. The accompanying template collects both topology and per-port device statistics from the UniFi controller.
 
-This directory contains **UniFi Topologie 0.3.0** and its **Zabbix 7.4** template. Version 0.3.0 extends the originally imported 0.2.0 package with bounded historical traffic charts and the required traffic items.
+This directory contains **UniFi Topologie 0.3.1** and its **Zabbix 7.4** template. Version 0.3.1 keeps every mini chart bound to its own device, adds translucent green area fills, and makes UniFi warnings dismissible for the current dashboard page.
 
 ## Contents
 
@@ -28,7 +28,7 @@ This directory contains **UniFi Topologie 0.3.0** and its **Zabbix 7.4** templat
 - Draws UniFi entries with `type=DEVICE` as network nodes.
 - Displays automatic wired and wireless connections from the UniFi topology response.
 - Shows port numbers, link rates, SSIDs, channels, and experience values when UniFi supplies them.
-- Shows a compact RX/TX chart on every discovered switch or access point for which traffic history is available.
+- Shows a compact, individually bound RX/TX chart in the upper-right corner of every network node; nodes without history open an explicit empty state instead of fabricated values.
 - Opens an accessible, automatically scaled RX/TX chart dialog using the current dashboard time period.
 - Expands a selected device to show directly attached clients, network links, and open Zabbix problems.
 - Uses Zabbix's configured severity names and colors.
@@ -75,7 +75,7 @@ unifi-network/
 ├── tests/                                        # Regression and package-installation tests
 └── source/
     ├── docs/original/                            # Supplied historical Markdown documents
-    ├── modules/unifi_topology/                   # Widget source 0.3.0
+    ├── modules/unifi_topology/                   # Widget source 0.3.1
     │   ├── actions/
     │   ├── assets/
     │   ├── includes/
@@ -91,7 +91,7 @@ unifi-network/
 
 The supplied standalone HTML previews are intentionally not included because they embed a historical topology snapshot with device names and MAC addresses. The nested ZIP is also omitted because its unchanged contents are available directly below `source/modules/unifi_topology/`.
 
-The files below `source/docs/original/` document older imported releases and are retained only as historical source material. Use this guide for version 0.3.0 installation and behavior.
+The files below `source/docs/original/` document older imported releases and are retained only as historical source material. Use this guide for version 0.3.1 installation and behavior.
 
 ## Install the topology template
 
@@ -357,7 +357,7 @@ For a non-default module root, pass the confirmed parent directory again. Then s
 
 The UniFi topology and device-statistics endpoints are internal and may change with controller updates. The template requires HTTP 200, rejects redirects, and verifies both TLS peer and host name. On collection failure, Zabbix retains previous item values; always check timestamps and item support state when diagnosing stale topology or chart gaps.
 
-If UniFi reports `has_unknown_switch=true`, the widget warns that intermediate devices may be missing. Manual additions do not prove that the automatic topology is complete.
+If UniFi reports `has_unknown_switch=true`, the widget warns that intermediate devices may be missing. The warning can be dismissed for the current dashboard page and returns after a full page reload. Manual additions do not prove that the automatic topology is complete.
 
 ## Security and permissions
 

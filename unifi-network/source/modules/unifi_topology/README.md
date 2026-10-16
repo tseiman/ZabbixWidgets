@@ -1,12 +1,18 @@
 # UniFi Topologie – Dashboard-Widget für Zabbix 7.4
 
-Version 0.3.0 · Mit RX/TX-Verlauf, konfigurierbaren manuellen Geräten und Verbindungen
+Version 0.3.1 · Mit RX/TX-Verlauf, konfigurierbaren manuellen Geräten und Verbindungen
 
 Das Widget liest das Text-Item „UniFi topology: Raw JSON“ und zeichnet die Netzwerkgeräte. Die Zabbix-History der vom mitgelieferten Template entdeckten Traffic-Items liefert kleine RX/TX-Diagramme und einen vergrößerbaren Dialog. Ein Klick auf den übrigen Knoten öffnet dessen Endgeräte, Netzwerkverbindungen und Zabbix-Probleme. Das Frontend schreibt keine Maps, Hosts, Items oder Trigger und ruft UniFi nicht direkt ab.
 
+## Korrekturen in 0.3.1
+
+- Jedes Netzwerkelement besitzt rechts oben einen eigenen, eindeutig über seine MAC-Adresse gebundenen Mini-Graphen. Die reine SVG-Darstellung bleibt auch unter den globalen Zabbix-Button-Stilen in ihrem Gerätekasten.
+- Mini- und Großdiagramme besitzen eine transparente grüne Flächenfüllung.
+- Orange UniFi-Warnungen haben rechts ein **×**. Das Schließen gilt nur für die aktuelle Dashboard-Seite; nach einem vollständigen Neuladen erscheint die Warnung erneut.
+
 ## Neu in 0.3.0
 
-- Jeder Switch und Access Point mit gesammelten Daten erhält rechts oben einen RX/TX-Mini-Graphen.
+- Jeder Switch und Access Point erhält rechts oben einen eigenen RX/TX-Mini-Graphen. Ohne gesammelte Daten bleibt er leer und öffnet den Hinweis, dass im gewählten Zeitraum keine Daten verfügbar sind.
 - Klick sowie Enter/Leertaste öffnen einen automatisch skalierten Dialog im Stil der Zabbix-Overlays.
 - Mini- und Großdiagramm folgen standardmäßig dem Zeitraum des Dashboards.
 - Das aktualisierte Template erfasst direkte Port-Raten und eine aus Byte-Zählern berechnete Ausweichserie.
@@ -94,7 +100,7 @@ Version 0.3.0 benötigt zusätzlich den Import des im Archiv unter `template/uni
 
 Blau zeigt RX, grün TX. Bevorzugt werden `rx_bytes-r` und `tx_bytes-r` jedes eindeutigen physischen Ports summiert und von Byte/s in bit/s umgerechnet. Fehlen diese Werte, verwendet Zabbix die Änderung pro Sekunde der summierten `rx_bytes`- beziehungsweise `tx_bytes`-Zähler. Logische LAG-, Bond- und Aggregate-Interfaces sowie doppelte Portindizes werden nicht zusätzlich gezählt. Bei Access Points ohne nutzbare `port_table` dient der einzelne physische `uplink` als Ausweichquelle.
 
-Das Feld **Traffic-Zeitraum** verweist standardmäßig auf den Dashboard-Zeitraum. Das Backend nutzt begrenzte Zabbix-History-/Trend-Aggregate mit maximal 320 Punkten je zugrunde liegendem Item. Manuell ergänzte Geräte und Geräte ohne passende History zeigen keinen erfundenen Graphen.
+Das Feld **Traffic-Zeitraum** verweist standardmäßig auf den Dashboard-Zeitraum. Das Backend nutzt begrenzte Zabbix-History-/Trend-Aggregate mit maximal 320 Punkten je zugrunde liegendem Item. Manuell ergänzte Geräte und Geräte ohne passende History zeigen ein leeres, eindeutig zugeordnetes Diagramm statt erfundener Messwerte.
 
 ## Verbindung zwischen Topologiegerät und Zabbix-Host
 
@@ -157,7 +163,7 @@ Das Widget aktualisiert sich, solange die Dashboard-Seite aktiv ist. Der aktuell
 
 Standardmäßig werden Topologiedaten nach 300 Sekunden als veraltet markiert. Bei einem deaktivierten oder nicht unterstützten Quell-Item erscheint ebenfalls ein Hinweis. Datum der Topologie und Zeitpunkt der Problemabfrage stehen unten. Wird der Problemstatus länger als die konfigurierte Altersgrenze nicht aktualisiert, werden die Knoten grau. Ein erneuter erfolgreicher Refresh stellt den aktuellen Zustand wieder her.
 
-UniFi `has_unknown_switch=true` wird sichtbar gemeldet. Insbesondere Clients hinter einem unbekannten Switch oder einer Bridge können alle demselben Uplink-Port zugeordnet sein; daraus wird kein direkter physischer Anschluss behauptet.
+UniFi `has_unknown_switch=true` wird sichtbar gemeldet. Insbesondere Clients hinter einem unbekannten Switch oder einer Bridge können alle demselben Uplink-Port zugeordnet sein; daraus wird kein direkter physischer Anschluss behauptet. Die Meldung kann mit **×** bis zum vollständigen Neuladen der Dashboard-Seite ausgeblendet werden.
 
 Diese erste Version ist für ein normales Dashboard mit ausgewähltem Controller-Item ausgelegt. Automatische Host-Override-/Template-Dashboard-Vererbung, Port-Trigger-Zuordnung, persistentes freies Verschieben von Knoten und das Aufklappen der Clients direkt als zusätzliche Diagrammknoten sind nicht enthalten. Die Clients erscheinen im Detailbereich.
 

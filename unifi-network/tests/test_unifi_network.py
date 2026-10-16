@@ -172,19 +172,43 @@ class WidgetTrafficContractTest(unittest.TestCase):
         self.assertIn("unifi\\.device\\.(rx|tx)\\.(rate|counter)\\.bps", traffic)
         self.assertIn("MAX_POINTS", traffic)
 
-    def test_frontend_has_accessible_mini_chart_and_pbs_style_overlay(self):
+    def test_frontend_binds_one_svg_mini_chart_to_each_device(self):
+        js = (MODULE / "assets/js/class.widget.js").read_text()
+        css = (MODULE / "assets/css/widget.css").read_text()
+        self.assertIn("this.svg('g'", js)
+        self.assertIn("'data-traffic-mac': node.mac", js)
+        self.assertIn("this._openTraffic(node, mini)", js)
+        self.assertIn("if (traffic) svg.append(traffic)", js)
+        self.assertNotIn("this.svg('foreignObject'", js)
+        self.assertNotIn("button.className = 'ut-traffic-mini'", js)
+        self.assertIn("event.key === 'Enter' || event.key === ' '", js)
+        self.assertIn("activator.focus()", js)
+        self.assertIn(".ut-traffic-mini:focus-visible", css)
+
+    def test_frontend_fills_charts_green_and_opens_pbs_style_overlay(self):
         js = (MODULE / "assets/js/class.widget.js").read_text()
         css = (MODULE / "assets/css/widget.css").read_text()
         manifest = json.loads((MODULE / "manifest.json").read_text())
-        self.assertIn("button.className = 'ut-traffic-mini'", js)
-        self.assertIn("aria-label", js)
-        self.assertIn("activator.focus()", js)
-        self.assertIn("_openTraffic", js)
+        self.assertIn("_seriesAreaPaths", js)
+        self.assertIn("ut-traffic-area", js)
+        self.assertRegex(css, r"\.ut-traffic-area\{[^}]*fill:rgba\(44,153,117,")
+        self.assertRegex(css, r"\.ut-traffic-chart\{[^}]*box-sizing:border-box")
         self.assertIn("document.body.append(dialog)", js)
         self.assertIn("dialog.showModal()", js)
         self.assertIn("dialog.ut-traffic-dialog", css)
         self.assertIn("::backdrop", css)
-        self.assertEqual(manifest["version"], "0.3.0")
+        self.assertEqual(manifest["version"], "0.3.1")
+
+    def test_unknown_switch_warning_is_dismissible_only_for_widget_lifetime(self):
+        js = (MODULE / "assets/js/class.widget.js").read_text()
+        css = (MODULE / "assets/css/widget.css").read_text()
+        self.assertIn("this.dismissedWarnings = new Set()", js)
+        self.assertIn("this.dismissedWarnings.add(warning)", js)
+        self.assertIn("Warnung schließen", js)
+        self.assertIn("ut-notice-close", js)
+        self.assertIn(".ut-notice-close", css)
+        self.assertNotIn("localStorage", js)
+        self.assertNotIn("sessionStorage", js)
 
 
 if __name__ == "__main__":
