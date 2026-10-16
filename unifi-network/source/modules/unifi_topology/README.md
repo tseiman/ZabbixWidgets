@@ -1,10 +1,17 @@
 # UniFi Topology — Dashboard Widget for Zabbix 7.4
 
-Version 0.3.3 · RX/TX history and configurable manual devices and links
+Version 0.3.4 · English/German UI, RX/TX history, and configurable manual devices and links
 
 The widget reads the `UniFi topology: Raw JSON` text item and renders the network devices. Zabbix history from traffic items discovered by the supplied template provides per-device RX/TX mini charts and an expandable dialog. Selecting the rest of a node opens its directly attached clients, network links, and Zabbix problems. The frontend does not create or modify maps, hosts, items, or triggers and does not contact UniFi directly.
 
-## Changes in 0.3.3
+## Changes in 0.3.4
+
+- Uses a bundled module-local catalog instead of relying on Zabbix core gettext entries for custom widget text.
+- Selects German for logged-in user languages `de`, `de_DE`, and `de-DE`; English and unsupported languages fall back to English.
+- Localizes widget forms, validation and runtime errors, warnings, controls, statuses, empty states, titles, and accessibility labels. Dates and numbers use the corresponding normalized `de-DE` or `en-US` Intl locale.
+- The manifest uses the static English name **UniFi Network Topology** because manifest metadata cannot change dynamically per user.
+
+## Behavior retained from 0.3.3
 
 - Manually added topology nodes, such as a LANCOM device not managed by UniFi, have no traffic chart icon because UniFi supplies no traffic information for them.
 - Every automatically discovered UniFi switch, access point, and other network device retains its traffic chart icon. The decision does not depend on a separate `unifiDevice` or `managed` property.
@@ -71,7 +78,7 @@ sudo ./unifi-network/install.sh
 After installation or update:
 
 1. Open **Administration → General → Modules → Scan directory** as a Zabbix Super Admin.
-2. Enable **UniFi topology**, or verify the detected version.
+2. Enable **UniFi Network Topology**, or verify the detected version.
 3. Fully reload the dashboard.
 4. For a new widget, select the controller host's **UniFi topology: Raw JSON** item as **Topology master item**.
 
@@ -146,7 +153,7 @@ Do not create alarms deliberately; use existing problems and normal resolution f
 
 ## Removal
 
-Remove the widget from dashboards, disable **UniFi topology** under **Administration → General → Modules**, and only then remove the module directory. Removing the frontend module does not alter templates or collected data.
+Remove the widget from dashboards, disable **UniFi Network Topology** under **Administration → General → Modules**, and only then remove the module directory. Removing the frontend module does not alter templates or collected data.
 
 ## Technical references
 

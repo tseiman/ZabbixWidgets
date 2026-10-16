@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__.'/../modules/pbs_summary/includes/I18n.php';
 use Modules\PbsSummary\Includes\Data;
 require __DIR__.'/test.php';
 $cases = [

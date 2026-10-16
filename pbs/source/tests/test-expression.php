@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__.'/../modules/pbs_summary/includes/I18n.php';
 require_once __DIR__.'/../modules/pbs_summary/includes/TaskFilter.php';
 use Modules\PbsSummary\Includes\TaskFilter;
 function verify($ok, $message) { if (!$ok) { throw new Exception($message); } }

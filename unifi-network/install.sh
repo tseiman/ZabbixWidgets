@@ -8,7 +8,7 @@ usage() {
     cat <<'EOF'
 Usage: install.sh [ZABBIX_MODULE_ROOT]
 
-Install or update the UniFi Topologie frontend module.
+Install or update the UniFi Network Topology frontend module.
 
 ZABBIX_MODULE_ROOT is the directory that contains Zabbix frontend modules.
 Default: /usr/share/zabbix/ui/modules
@@ -138,5 +138,5 @@ if [[ -n "$PREVIOUS" ]]; then
 fi
 
 trap - EXIT INT TERM HUP
-printf 'Installed UniFi Topologie module in %s\n' "$TARGET"
-printf 'Next: scan the module directory in Zabbix and enable or reload UniFi Topologie.\n'
+printf 'Installed UniFi Network Topology module in %s\n' "$TARGET"
+printf 'Next: scan the module directory in Zabbix and enable or reload UniFi Network Topology.\n'

@@ -4,7 +4,7 @@
   "type": "widget",
   "name": "PBS Task Summary",
   "namespace": "PbsSummary",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "author": "PBS Dashboard",
   "description": "PBS panel using Zabbix items and history.",
   "widget": {

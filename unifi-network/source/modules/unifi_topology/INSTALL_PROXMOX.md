@@ -33,9 +33,9 @@ Bei bestätigtem älteren Pfad stattdessen `/usr/share/zabbix/modules` verwenden
 ## 3. Aktivieren
 
 1. Als Zabbix-Super-Admin **Administration → General → Modules → Scan directory** öffnen.
-2. **UniFi Topologie** aktivieren.
+2. **UniFi Network Topology** aktivieren.
 3. Dashboard neu laden und bearbeiten.
-4. Widget **UniFi Topologie** hinzufügen.
+4. Widget **UniFi Network Topology** hinzufügen.
 5. Auf dem Controller-Host das Master-Item **UniFi topology: Raw JSON** auswählen.
 6. Aktualisierungsintervall **1 Minute** und Dashboard speichern.
 

@@ -2,6 +2,7 @@
 namespace Modules\UniFiTopology\Actions;
 use CControllerDashboardWidgetView;
 use CControllerResponseData;
+use Modules\UniFiTopology\Includes\I18n;
 use Modules\UniFiTopology\Includes\Topology;
 
 class WidgetView extends CControllerDashboardWidgetView {
@@ -14,7 +15,7 @@ class WidgetView extends CControllerDashboardWidgetView {
         catch (\Throwable $e) {
             $error = $e instanceof \InvalidArgumentException || $e instanceof \RuntimeException
                 ? $e->getMessage()
-                : 'Topologie konnte nicht geladen werden. Modulversion und Zabbix-Frontend-Protokoll pruefen.';
+                : I18n::t('The topology could not be loaded. Check the module version and Zabbix frontend log.');
             if (!($e instanceof \InvalidArgumentException) && !($e instanceof \RuntimeException)) {
                 error_log('UniFi Topology: '.get_class($e).': '.$e->getMessage());
             }
@@ -23,6 +24,7 @@ class WidgetView extends CControllerDashboardWidgetView {
             'name' => $this->getInput('name', $this->widget->getName()),
             'topology' => $topology,
             'topology_error' => $error,
+            'locale' => I18n::locale(),
             'user' => ['debug_mode' => $this->getDebugMode()]
         ]));
     }

@@ -2,7 +2,7 @@
 
 Five custom Zabbix dashboard widgets for monitoring Proxmox Backup Server (PBS), together with an extended Zabbix template, data collectors, an installation/update script, and configuration examples.
 
-This directory contains the **PBS Dashboard 1.0.5** source package. Its runtime code, template, collectors, installer, tests, and configuration example are preserved as supplied; only the package README was translated from German to English for this repository. The included template is exported in the **Zabbix 7.4** format.
+This directory contains the **PBS Dashboard 1.0.6** source package. Version 1.0.6 adds module-local English/German localization to all five widgets while preserving their widget IDs, settings, template, collectors, and data behavior. The included template is exported in the **Zabbix 7.4** format.
 
 ## Contents
 
@@ -60,7 +60,7 @@ If the Zabbix server, proxy, and frontend run on different systems or in differe
 pbs/
 ├── README.md                 # This project-specific guide
 ├── assets/                   # README screenshots
-└── source/                   # PBS Dashboard 1.0.5 package
+└── source/                   # PBS Dashboard 1.0.6 package
     ├── collector/            # Zabbix JavaScript task collectors
     ├── config/               # Direct-log connection example
     ├── modules/              # Five Zabbix frontend modules
@@ -72,7 +72,7 @@ pbs/
     └── update.sh             # Module installer/updater
 ```
 
-The runtime and deployment files below `source/` are preserved exactly as supplied. `source/README.md` is an English translation of the supplied German document, and its entry in `source/SHA256SUMS` reflects the translated repository copy. Use the checksum manifest to verify the complete current tree.
+The repository maintains the package under `source/`. Version 1.0.6 changes the frontend modules, tests, installer messages, and documentation for localization; the template and collectors are unchanged. Use `source/SHA256SUMS` to verify the complete current tree.
 
 ## Installation
 

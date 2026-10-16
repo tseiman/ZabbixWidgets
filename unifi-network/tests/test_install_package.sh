@@ -44,6 +44,8 @@ PACKAGE_ROOT=${package_roots[0]}
 [[ -x "$PACKAGE_ROOT/install.sh" ]]
 [[ -f "$PACKAGE_ROOT/module/manifest.json" ]]
 [[ -f "$PACKAGE_ROOT/module/Widget.php" ]]
+[[ -f "$PACKAGE_ROOT/module/includes/I18n.php" ]]
+[[ -f "$PACKAGE_ROOT/module/includes/i18n.json" ]]
 [[ -f "$PACKAGE_ROOT/template/unifi_network_topology_zabbix74.yaml" ]]
 
 MODULE_ROOT="$WORK/custom modules"
@@ -52,6 +54,8 @@ mkdir -p -- "$MODULE_ROOT"
 TARGET="$MODULE_ROOT/unifi_topology"
 [[ -f "$TARGET/manifest.json" ]]
 [[ -f "$TARGET/Widget.php" ]]
+[[ -f "$TARGET/includes/I18n.php" ]]
+[[ -f "$TARGET/includes/i18n.json" ]]
 [[ $(stat -c '%a' "$TARGET") == 755 ]]
 [[ $(stat -c '%a' "$TARGET/manifest.json") == 644 ]]
 if find "$TARGET" -type f \( -iname '*.md' -o -iname 'readme*' \) -print -quit | grep -q .; then

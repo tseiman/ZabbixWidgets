@@ -2,7 +2,7 @@
 
 A read-only Zabbix 7.4 dashboard widget that visualizes a UniFi Network topology, links network devices to Zabbix hosts, overlays the current Zabbix problem severity, and shows per-device RX/TX traffic history. The accompanying template collects both topology and per-port device statistics from the UniFi controller.
 
-This directory contains **UniFi Topologie 0.3.3** and its **Zabbix 7.4** template. Version 0.3.3 keeps every automatically discovered UniFi device's mini chart while omitting the chart control only for manually added topology nodes that have no UniFi traffic information.
+This directory contains **UniFi Network Topology 0.3.4** and its **Zabbix 7.4** template. Version 0.3.4 adds module-local English and German frontend translations selected from the logged-in Zabbix user's language. German variants (`de`, `de_DE`, and `de-DE`) use German; English and unsupported languages use the English source fallback. The manual-only traffic-chart rule from 0.3.3 is unchanged: every automatically discovered device retains its mini chart.
 
 ## Contents
 
@@ -75,7 +75,7 @@ unifi-network/
 ├── tests/                                        # Regression and package-installation tests
 └── source/
     ├── docs/original/                            # Supplied historical Markdown documents
-    ├── modules/unifi_topology/                   # Widget source 0.3.1
+    ├── modules/unifi_topology/                   # Widget source 0.3.4
     │   ├── actions/
     │   ├── assets/
     │   ├── includes/
@@ -91,7 +91,7 @@ unifi-network/
 
 The supplied standalone HTML previews are intentionally not included because they embed a historical topology snapshot with device names and MAC addresses. The nested ZIP is also omitted because its unchanged contents are available directly below `source/modules/unifi_topology/`.
 
-The files below `source/docs/original/` document older imported releases and are retained only as historical source material. Use this guide for version 0.3.1 installation and behavior.
+The files below `source/docs/original/` document older imported releases and are retained only as historical source material. Use this guide for current installation and behavior.
 
 ## Install the topology template
 
@@ -184,17 +184,17 @@ In Zabbix:
 
 1. Open **Administration → General → Modules** as a Super Admin.
 2. Select **Scan directory**.
-3. Enable **UniFi Topologie**, or verify the detected version after an update.
+3. Enable **UniFi Network Topology**, or verify the detected version after an update.
 4. Fully reload the dashboard page.
 
 No Zabbix server restart and no additional API token are required. If an enabled PHP OPcache retains old files, refresh it using the site's normal administrative procedure.
 
 ## Configure the widget
 
-Edit a dashboard and add **UniFi Topologie**. Configure:
+Edit a dashboard and add **UniFi Network Topology**. The widget controls, statuses, warnings, errors, ARIA labels, and empty states follow the logged-in user's English or German language. Configure:
 
-- **Topologie-Master-Item** — select `UniFi topology: Raw JSON` on the controller host.
-- **Traffic-Zeitraum** — keep **Dashboard** selected to follow the dashboard time selector; a custom period can be chosen per widget if required.
+- **Topology master item** (**Topologie-Master-Item** in German) — select `UniFi topology: Raw JSON` on the controller host.
+- **Traffic time period** (**Traffic-Zeitraum** in German) — keep **Dashboard** selected to follow the dashboard time selector; a custom period can be chosen per widget if required.
 - **Refresh interval** — normally one minute, matching the template item.
 - **Exact Zabbix host name with `{name}`** — mapping pattern described below.
 - **Optional mapping** — explicit `MAC=Host-ID` entries.
@@ -373,7 +373,7 @@ If UniFi reports `has_unknown_switch=true`, the widget warns that intermediate d
 ## Removal
 
 1. Remove the widget from dashboards.
-2. Disable **UniFi Topologie** under **Administration → General → Modules**.
+2. Disable **UniFi Network Topology** under **Administration → General → Modules**.
 3. Remove the `unifi_topology` module directory only after it is disabled.
 
 Removing the frontend module does not remove or modify the topology template or collected item data.

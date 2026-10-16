@@ -1,6 +1,13 @@
-# PBS Dashboard 1.0.5
+# PBS Dashboard 1.0.6
 
-Complete package with five Zabbix widgets, a template, collectors, an installation script, and tests. It builds on version 1.0.4.
+Complete package with five Zabbix widgets, a template, collectors, an installation script, and tests.
+
+## New in 1.0.6
+
+- **Module-local localization:** all five widget UIs use the language selected in the Zabbix user profile without relying on custom strings in the Zabbix core gettext catalog.
+- **English and German:** English is the source and safe fallback language; `de`, `de_DE`, and `de-DE` select the bundled German translations.
+- **Consistent frontend formatting:** JavaScript receives the server-resolved language for date and number formatting.
+- **No template changes:** widget IDs, settings, template items, and collector behavior remain unchanged.
 
 ## New in 1.0.5
 
@@ -14,8 +21,8 @@ Complete package with five Zabbix widgets, a template, collectors, an installati
 Run as root on the Zabbix frontend server:
 
 ```sh
-tar -xzf pbs-dashboard-1.0.5.tar.gz
-sh pbs-dashboard-1.0.5/update.sh /usr/share/zabbix/ui
+tar -xzf pbs-dashboard-1.0.6.tar.gz
+sh pbs-dashboard-1.0.6/update.sh /usr/share/zabbix/ui
 ```
 
 `/usr/share/zabbix` is also supported when the frontend is located in its `ui` subdirectory. The script backs up existing PBS modules to `/var/backups/pbs-dashboard/<timestamp-process-number>` and displays the resulting path. Other modules remain untouched. In container deployments, the modules must reside in the persistent frontend volume.
@@ -25,7 +32,7 @@ sh pbs-dashboard-1.0.5/update.sh /usr/share/zabbix/ui
 3. Edit the dashboard, add **PBS Task List**, and select the PBS host and number of rows.
 4. Configure the following connection once to enable logs. The widgets continue to work without it; attempting to open a log displays a setup notice.
 
-**No template re-import is required. Do not delete or reinstall the template.** Module versions are consistently set to 1.0.5, and existing widget IDs and settings remain unchanged.
+**No template re-import is required. Do not delete or reinstall the template.** Module versions are consistently set to 1.0.6, and existing widget IDs and settings remain unchanged.
 
 ## One-time setup for direct task logs
 
@@ -36,7 +43,7 @@ Secret Zabbix macros are not read. A file outside the web root maps allowed Zabb
 For the initial setup, copy the example file and edit it with **mcedit**. Replace the `www-data` group with the actual PHP-FPM or webserver group when it differs. If `/etc/zabbix` does not exist, create it first without changing the permissions of an existing directory.
 
 ```sh
-install -m 0640 -o root -g www-data pbs-dashboard-1.0.5/config/pbs-dashboard.example.json /etc/zabbix/pbs-dashboard.json
+install -m 0640 -o root -g www-data pbs-dashboard-1.0.6/config/pbs-dashboard.example.json /etc/zabbix/pbs-dashboard.json
 mcedit /etc/zabbix/pbs-dashboard.json
 ```
 

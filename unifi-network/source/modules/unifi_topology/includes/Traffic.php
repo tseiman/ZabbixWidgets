@@ -13,7 +13,7 @@ class Traffic {
 
     private static function result($value): array {
         if (!is_array($value)) {
-            throw new RuntimeException('Traffic-Abfrage fehlgeschlagen oder Berechtigung fehlt.');
+            throw new RuntimeException(I18n::t('The traffic query failed or permission is missing.'));
         }
 
         return $value;
@@ -21,22 +21,22 @@ class Traffic {
 
     private static function parsePeriod(array $period): array {
         if (!isset($period['from'], $period['to'])) {
-            throw new RuntimeException('Dashboard-Zeitraum fuer Traffic-Diagramme fehlt.');
+            throw new RuntimeException(I18n::t('The dashboard time period for traffic charts is missing.'));
         }
 
         $parser = new CRangeTimeParser();
         if ($parser->parse((string) $period['from']) !== CParser::PARSE_SUCCESS) {
-            throw new RuntimeException('Start des Dashboard-Zeitraums ist ungueltig.');
+            throw new RuntimeException(I18n::t('The start of the dashboard time period is invalid.'));
         }
         $from = $parser->getDateTime(true)->getTimestamp();
 
         if ($parser->parse((string) $period['to']) !== CParser::PARSE_SUCCESS) {
-            throw new RuntimeException('Ende des Dashboard-Zeitraums ist ungueltig.');
+            throw new RuntimeException(I18n::t('The end of the dashboard time period is invalid.'));
         }
         $to = $parser->getDateTime(false)->getTimestamp();
 
         if ($from >= $to) {
-            throw new RuntimeException('Dashboard-Zeitraum fuer Traffic-Diagramme ist leer.');
+            throw new RuntimeException(I18n::t('The dashboard time period for traffic charts is empty.'));
         }
 
         return [$from, $to];

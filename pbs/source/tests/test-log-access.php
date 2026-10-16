@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__.'/../modules/pbs_tasks/includes/I18n.php';
 define('USER_TYPE_ZABBIX_USER', 1);
 class CController {
     public array $input = ['hostid' => '123'];

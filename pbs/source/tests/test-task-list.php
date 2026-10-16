@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__.'/../modules/pbs_tasks/includes/I18n.php';
 require __DIR__.'/test.php';
 require __DIR__.'/../modules/pbs_tasks/includes/Data.php';
 require __DIR__.'/../modules/pbs_tasks/includes/TaskList.php';
@@ -17,7 +18,7 @@ check(array_column($rows, 'starttime') === [300, 200, 100], 'Sort by start, not 
 $data = ['mode' => 'tasks', 'error' => null, 'host' => 'PBS', 'hostid' => '123', 'rows' => $rows, 'period' => 'Test', 'limit' => 2, 'warnings' => []];
 $renderList = static function($data) { ob_start(); require __DIR__.'/../modules/pbs_tasks/views/widget.view.php'; return ob_get_clean(); };
 $html = $renderList($data);
-check(strpos($html, '2 von 3 Tasks') !== false, 'Explicit visible limit');
+check(strpos($html, '2 of 3 tasks') !== false, 'Explicit visible limit');
 check(strpos($html, 'Read Objects') !== false && strpos($html, 'connection error: not connected') !== false, 'Summary filter does not affect new list');
 check(strpos($html, 'backup@pbs!pve-backup') !== false, 'User column');
 check(strpos($html, '<script>') === false && strpos($html, '&lt;script&gt;') !== false, 'Task labels escaped');

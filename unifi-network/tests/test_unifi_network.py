@@ -198,18 +198,65 @@ class WidgetTrafficContractTest(unittest.TestCase):
         self.assertIn("dialog.showModal()", js)
         self.assertIn("dialog.ut-traffic-dialog", css)
         self.assertIn("::backdrop", css)
-        self.assertEqual(manifest["version"], "0.3.3")
+        self.assertEqual(manifest["version"], "0.3.4")
 
     def test_unknown_switch_warning_is_dismissible_only_for_widget_lifetime(self):
         js = (MODULE / "assets/js/class.widget.js").read_text()
         css = (MODULE / "assets/css/widget.css").read_text()
         self.assertIn("this.dismissedWarnings = new Set()", js)
         self.assertIn("this.dismissedWarnings.add(warning)", js)
-        self.assertIn("Warnung schließen", js)
+        self.assertIn("t('Close warning')", js)
         self.assertIn("ut-notice-close", js)
         self.assertIn(".ut-notice-close", css)
         self.assertNotIn("localStorage", js)
         self.assertNotIn("sessionStorage", js)
+
+
+class WidgetLocalizationContractTest(unittest.TestCase):
+    def test_module_catalog_selects_german_and_falls_back_to_english(self):
+        helper = (MODULE / "includes/I18n.php").read_text()
+        catalog = json.loads((MODULE / "includes/i18n.json").read_text())
+        self.assertEqual(catalog['de']['Close'], 'Schließen')
+        self.assertIn("\\CWebUser::$data['lang']", helper)
+        self.assertIn("preg_split('/[-_]/'", helper)
+        self.assertIn("return $base === 'de' ? 'de' : 'en'", helper)
+        self.assertIn("return self::language($language) === 'de' ? 'de-DE' : 'en-US'", helper)
+        self.assertIn('$translated = $source', helper)
+
+    def test_widget_translation_hook_covers_every_javascript_literal(self):
+        js = (MODULE / "assets/js/class.widget.js").read_text()
+        javascript_keys = set(re.findall(r"\bt\('((?:\\.|[^'\\])*)'", js))
+        self.assertGreater(len(javascript_keys), 30)
+
+        catalog = json.loads((MODULE / "includes/i18n.json").read_text())
+        widget = (MODULE / "Widget.php").read_text()
+        self.assertEqual(set(catalog['javascript']), javascript_keys)
+        self.assertEqual(set(catalog['javascript']) - set(catalog['de']), set())
+        self.assertEqual(catalog['de']['Close'], 'Schließen')
+        self.assertEqual(catalog['de']['No topology data was received.'], 'Keine Topologiedaten erhalten.')
+        self.assertIn('public function getTranslationStrings(): array', widget)
+        self.assertIn("'class.widget.js' => I18n::browserCatalog()", widget)
+
+    def test_javascript_has_no_raw_german_ui_literals_and_uses_explicit_locale(self):
+        js = (MODULE / "assets/js/class.widget.js").read_text()
+        for german in (
+            'Schließen', 'Warnung', 'Keine ', 'Gerät', 'Verbindung', 'Probleme',
+            'Topologie', 'veraltet', 'unterdrückt', 'Manuell', 'Netzwerkgeräte',
+            'vergrößern', 'verkleinern', 'Zeitraum', 'Durchsatz'
+        ):
+            self.assertNotIn(german, js)
+        self.assertIn("this.locale = locale === 'de-DE' ? 'de-DE' : 'en-US'", js)
+        self.assertNotIn('toLocaleString(undefined', js)
+        self.assertNotIn('toLocaleDateString(undefined', js)
+        self.assertNotIn('toLocaleTimeString(undefined', js)
+
+    def test_php_custom_ui_strings_do_not_use_core_gettext(self):
+        php = '\n'.join(path.read_text() for path in MODULE.rglob('*.php'))
+        catalog = json.loads((MODULE / "includes/i18n.json").read_text())
+        php_keys = set(re.findall(r"I18n::t\('((?:\\.|[^'\\])*)'", php))
+        self.assertNotRegex(php, r"\b_\(")
+        self.assertIn('I18n::t(', php)
+        self.assertEqual(php_keys - set(catalog['de']), set())
 
 
 if __name__ == "__main__":

@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__.'/../modules/pbs_tasks/includes/I18n.php';
 require __DIR__.'/../modules/pbs_tasks/includes/LogReader.php';
 use Modules\PbsTasks\Includes\LogReader;
 function check($ok, $message) { if (!$ok) { throw new Exception($message); } }

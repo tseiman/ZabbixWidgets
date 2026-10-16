@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__.'/../modules/pbs_summary/includes/I18n.php';
 require __DIR__.'/../modules/pbs_summary/includes/Data.php';
 require __DIR__.'/../modules/pbs_summary/includes/TaskFilter.php';
 use Modules\PbsSummary\Includes\Data;
@@ -31,10 +32,10 @@ check(count((new Data('1'))->tasks($now - 170000, $now - 170000)) === 1, 'Inclus
 $reader = new Data('1'); $reader->tasks($now - 500000, $now);
 check(count($reader->warnings) > 0, 'Missing historical coverage is visible');
 $saved = API::$rows; array_pop(API::$rows);
-try { (new Data('1'))->tasks($now - 270000, $now); throw new Exception('Missing shard accepted'); } catch (RuntimeException $e) { check(strpos($e->getMessage(), 'unvollständig') !== false, 'Missing shard is rejected'); }
+try { (new Data('1'))->tasks($now - 270000, $now); throw new Exception('Missing shard accepted'); } catch (RuntimeException $e) { check(strpos($e->getMessage(), 'incomplete') !== false, 'Missing shard is rejected'); }
 API::$rows = $saved;
 API::$rows[] = ['itemid' => '17', 'clock' => $now - 200, 'ns' => 0, 'value' => json_encode(['until' => $now - 200, 'tasks' => []])];
-try { (new Data('1'))->running(); throw new Exception('Stale running result accepted'); } catch (RuntimeException $e) { check(strpos($e->getMessage(), 'veraltet') !== false, 'Stale running is rejected'); }
+try { (new Data('1'))->running(); throw new Exception('Stale running result accepted'); } catch (RuntimeException $e) { check(strpos($e->getMessage(), 'stale') !== false, 'Stale running is rejected'); }
 check(Data::status('WARNINGS: 2') === 'warning', 'PBS warning status');
 check(Data::status('OK') === 'ok' && Data::status('aborted') === 'error' && Data::status('unknown') === 'unknown', 'Statuses');
 check(Data::category('verification') === 'Verify', 'Verify variants');
@@ -53,15 +54,15 @@ check(strpos($html, 'data-pbs-tasks=') !== false, 'Task dialog payload present')
 check(strpos($html, 'Warning / Running') === false, 'Running tasks excluded from summary');
 echo "PHP tests passed: coverage, deduplication, boundaries, incomplete shards, staleness, status, escaping, popup payload.\n";
 $render = static function($data) { ob_start(); require __DIR__.'/../modules/pbs_summary/views/widget.view.php'; return ob_get_clean(); };
-$data['warnings'] = ['Zeitraum nur teilweise erfasst. Test'];
+$data['warnings'] = ['The time period is only partially captured. Test'];
 $html = $render($data);
 check(strpos($html, 'class="pbs-notice"') === false, 'No warning banners for coverage');
 check(strpos($html, '</table>') < strpos($html, '<details class="pbs-health">'), 'Coverage details appear after table');
-check(strpos($html, 'Zeitraum teilweise erfasst') !== false, 'Partial coverage remains visible when collapsed');
+check(strpos($html, 'Time period partially captured') !== false, 'Partial coverage remains visible when collapsed');
 $data['mode'] = 'running'; $data['rows'] = []; $data['warnings'] = [];
 $html = $render($data);
-check(strpos($html, 'Keine laufenden Tasks.') !== false && strpos($html, 'pbs-notice') === false, 'Successful empty running list is neutral');
-$data['error'] = 'Keine gespeicherten Werte: pbs.dashboard.tasks.running'; $data['waiting'] = true;
+check(strpos($html, 'No running tasks.') !== false && strpos($html, 'pbs-notice') === false, 'Successful empty running list is neutral');
+$data['error'] = 'No stored values: pbs.dashboard.tasks.running'; $data['waiting'] = true;
 $html = $render($data);
-check(strpos($html, 'Keine gespeicherten Werte:') !== false && strpos($html, 'Keine laufenden Tasks.') === false && strpos($html, 'pbs-notice') !== false, 'Missing measurement keeps warning as requested');
+check(strpos($html, 'No stored values:') !== false && strpos($html, 'No running tasks.') === false && strpos($html, 'pbs-notice') !== false, 'Missing measurement keeps warning as requested');
 echo "UI regression passed: compact footer, neutral empty state, missing-data warning preserved.\n";

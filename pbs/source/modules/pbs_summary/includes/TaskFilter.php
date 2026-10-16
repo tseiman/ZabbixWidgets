@@ -10,16 +10,16 @@ class TaskFilter {
     private ?array $tree = null;
 
     public function __construct(string $expression) {
-        if (strlen($expression) > self::MAX_LENGTH) { throw new \InvalidArgumentException('Maximal 255 Bytes erlaubt.'); }
+        if (strlen($expression) > self::MAX_LENGTH) { throw new \InvalidArgumentException(I18n::t('Maximum 255 bytes allowed.')); }
         $this->expression = $expression;
         $this->space();
         if ($this->offset === strlen($expression)) { return; }
         $this->tree = $this->parseOr();
         $this->space();
-        if ($this->offset !== strlen($expression)) { $this->invalid('Unerwartetes Zeichen'); }
+        if ($this->offset !== strlen($expression)) { $this->invalid(I18n::t('Unexpected character')); }
     }
     private function invalid(string $message): void {
-        throw new \InvalidArgumentException($message.' an Position '.($this->offset + 1).'.');
+        throw new \InvalidArgumentException(I18n::tf('%s at position %d.', $message, $this->offset + 1));
     }
     private function space(): void {
         while ($this->offset < strlen($this->expression) && strpos(" \t\r\n", $this->expression[$this->offset]) !== false) { $this->offset++; }
@@ -44,23 +44,23 @@ class TaskFilter {
         if ($this->take('!')) { return ['not', $this->parseAtom()]; }
         if ($this->take('(')) {
             $node = $this->parseOr();
-            if (!$this->take(')')) { $this->invalid('Schließende Klammer fehlt'); }
+            if (!$this->take(')')) { $this->invalid(I18n::t('Closing parenthesis is missing')); }
             return $node;
         }
         $this->space();
-        if (!preg_match('/\G[a-z_]+/', $this->expression, $match, 0, $this->offset)) { $this->invalid('Feldname erwartet'); }
+        if (!preg_match('/\G[a-z_]+/', $this->expression, $match, 0, $this->offset)) { $this->invalid(I18n::t('Field name expected')); }
         $field = $match[0];
-        if (!in_array($field, ['worker_type', 'status', 'worker_id', 'user', 'node'], true)) { $this->invalid('Unbekanntes Feld '.$field); }
+        if (!in_array($field, ['worker_type', 'status', 'worker_id', 'user', 'node'], true)) { $this->invalid(I18n::tf('Unknown field %s', $field)); }
         $this->offset += strlen($field);
         if ($this->take('===')) { $operator = 'eq'; }
         elseif ($this->take('!==')) { $operator = 'ne'; }
-        else { $this->invalid('Vergleich === oder !== erwartet'); }
+        else { $this->invalid(I18n::t('Comparison === or !== expected')); }
         return [$operator, $field, $this->literal()];
     }
     private function literal(): string {
         $this->space();
         $quote = $this->expression[$this->offset] ?? '';
-        if ($quote !== "'" && $quote !== '"') { $this->invalid('Text in einfachen oder doppelten Anführungszeichen erwartet'); }
+        if ($quote !== "'" && $quote !== '"') { $this->invalid(I18n::t('Text in single or double quotes expected')); }
         $this->offset++;
         $value = '';
         while ($this->offset < strlen($this->expression)) {
@@ -68,12 +68,12 @@ class TaskFilter {
             if ($char === $quote) { return $value; }
             if ($char === '\\') {
                 $char = $this->expression[$this->offset] ?? '';
-                if ($char !== $quote && $char !== '\\') { $this->invalid('Nur Anführungszeichen und Backslash dürfen maskiert werden'); }
+                if ($char !== $quote && $char !== '\\') { $this->invalid(I18n::t('Only quotes and backslashes may be escaped')); }
                 $this->offset++;
             }
             $value .= $char;
         }
-        $this->invalid('Schließendes Anführungszeichen fehlt');
+        $this->invalid(I18n::t('Closing quote is missing'));
     }
     public function matches(array $task): bool {
         return $this->tree !== null && $this->evaluate($this->tree, $task);

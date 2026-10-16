@@ -1,6 +1,7 @@
 <?php
 namespace Modules\PbsRunning\Actions;
 use Modules\PbsRunning\Includes\LogReader;
+use Modules\PbsRunning\Includes\I18n;
 class TaskLog extends \CController {
     protected function init(): void {
         $this->setPostContentType(self::POST_CONTENT_TYPE_JSON);
@@ -16,7 +17,7 @@ class TaskLog extends \CController {
             try { LogReader::validateTask($this->getInput('upid'), (int) $this->getInput('start', 1)); }
             catch (\InvalidArgumentException $e) { $ok = false; }
         }
-        if (!$ok) { $this->respond(['error' => ['messages' => ['Ungültige Log-Anfrage.']]]); }
+        if (!$ok) { $this->respond(['error' => ['messages' => [I18n::t('Invalid log request.')]]]); }
         return $ok;
     }
     protected function checkPermissions(): bool {
@@ -33,6 +34,6 @@ class TaskLog extends \CController {
             $this->respond($result);
         }
         catch (\RuntimeException $e) { $this->respond(['error' => ['messages' => [$e->getMessage()]]]); }
-        catch (\Throwable $e) { $this->respond(['error' => ['messages' => ['Log konnte nicht gelesen werden. Serverkonfiguration prüfen.']]]); }
+        catch (\Throwable $e) { $this->respond(['error' => ['messages' => [I18n::t('The log could not be read. Check the server configuration.')]]]); }
     }
 }

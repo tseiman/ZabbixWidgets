@@ -1,5 +1,6 @@
 <?php
 namespace {
+    require_once __DIR__.'/../modules/pbs_tasks/includes/I18n.php';
     if (!function_exists('curl_init')) { function curl_init() {} }
     foreach (['CURLOPT_HTTPHEADER','CURLOPT_CONNECTTIMEOUT','CURLOPT_TIMEOUT','CURLOPT_FOLLOWLOCATION','CURLOPT_SSL_VERIFYPEER','CURLOPT_SSL_VERIFYHOST','CURLOPT_PROTOCOLS','CURLOPT_WRITEFUNCTION','CURLOPT_CAINFO','CURLPROTO_HTTPS','CURLINFO_HTTP_CODE'] as $i => $name) { if (!defined($name)) { define($name, $i + 1); } }
 }
