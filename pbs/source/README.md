@@ -1,46 +1,46 @@
 # PBS Dashboard 1.0.5
 
-Vollständiges Paket mit fünf Zabbix-Widgets, Template, Sammlern, Installationsskript und Tests. Baut auf Version 1.0.4 auf.
+Complete package with five Zabbix widgets, a template, collectors, an installation script, and tests. It builds on version 1.0.4.
 
-## Neu in 1.0.5
+## New in 1.0.5
 
-- **PBS Task List:** abgeschlossene Tasks mit Start, Ende, Benutzer, Beschreibung und Status; neueste Startzeit zuerst. Fehler rot, Warnungen gelb. Standardmäßig 50 Zeilen, im Widget 1 bis 1000 einstellbar; die Gesamtzahl wird angezeigt. Der Dashboard-Zeitraum wird wie bisher anhand der Abschlusszeit ausgewertet.
-- **Logs direkt in Zabbix:** Task in Task List, Longest Tasks oder Running Tasks anklicken. In Summary zunächst die Kategorie/Status-Zahl, danach den Task wählen. Bei genau einem Task öffnet sich das Log sofort. „Weitere Log-Zeilen“ und „Neu laden“ sind verfügbar.
-- Template und Sammler sind unverändert. Der Benutzername wird bei bestehenden Snapshots aus der PBS-UPID gelesen.
-- Summary-Filter, Zeiträume, Deduplizierung und sonstige Funktionen bleiben erhalten. Der Summary-Filter gilt ausschließlich im jeweiligen Summary-Widget; Task List zeigt alle verfügbaren abgeschlossenen Tasks.
+- **PBS Task List:** completed tasks with start time, end time, user, description, and status, sorted by newest start time first. Errors are red and warnings are yellow. The default is 50 rows; the widget setting accepts 1 to 1000 rows and displays the total count. As before, the dashboard period is evaluated against each task's completion time.
+- **Logs directly in Zabbix:** select a task in Task List, Longest Tasks, or Running Tasks. In Summary, first select the category/status count and then the task. When exactly one task matches, its log opens immediately. **More log lines** and **Reload** actions are available.
+- The template and collectors are unchanged. For existing snapshots, the user name is parsed from the PBS UPID.
+- Summary filtering, time periods, deduplication, and all other functions remain available. The Summary filter applies only to the individual Summary widget; Task List displays all available completed tasks.
 
-## Upgrade von 1.0.4
+## Upgrade from 1.0.4
 
-Als root auf dem Zabbix-Webfrontend-Server:
+Run as root on the Zabbix frontend server:
 
 ```sh
 tar -xzf pbs-dashboard-1.0.5.tar.gz
 sh pbs-dashboard-1.0.5/update.sh /usr/share/zabbix/ui
 ```
 
-Auch `/usr/share/zabbix` wird unterstützt, wenn das Frontend darunter in `ui` liegt. Das Skript sichert vorhandene PBS-Module nach `/var/backups/pbs-dashboard/<Zeitstempel-Prozessnummer>` und zeigt den Pfad an. Andere Module bleiben unberührt. Bei Containern müssen die Module im dauerhaften Frontend-Volume liegen.
+`/usr/share/zabbix` is also supported when the frontend is located in its `ui` subdirectory. The script backs up existing PBS modules to `/var/backups/pbs-dashboard/<timestamp-process-number>` and displays the resulting path. Other modules remain untouched. In container deployments, the modules must reside in the persistent frontend volume.
 
-1. **Administration → General → Modules → Scan directory** ausführen, **PBS Task List** aktivieren. Vorhandene Module aktiviert lassen.
-2. Dashboard mit **Strg+F5** / **Cmd+Shift+R** vollständig neu laden.
-3. Dashboard bearbeiten, **PBS Task List** hinzufügen, PBS-Host und Zeilenanzahl auswählen.
-4. Für Logs einmalig die folgende Verbindung einrichten. Ohne sie funktionieren die Widgets weiter; der Log-Aufruf zeigt einen Einrichtungshinweis.
+1. Run **Administration → General → Modules → Scan directory** and enable **PBS Task List**. Keep the existing modules enabled.
+2. Fully reload the dashboard with **Ctrl+F5** or **Cmd+Shift+R**.
+3. Edit the dashboard, add **PBS Task List**, and select the PBS host and number of rows.
+4. Configure the following connection once to enable logs. The widgets continue to work without it; attempting to open a log displays a setup notice.
 
-**Kein erneuter Template-Import nötig. Das Template nicht löschen oder neu installieren.** Die Modulversionen sind konsistent 1.0.5, bestehende Widget-IDs und Einstellungen bleiben erhalten.
+**No template re-import is required. Do not delete or reinstall the template.** Module versions are consistently set to 1.0.5, and existing widget IDs and settings remain unchanged.
 
-## Direkte Task-Logs einmalig einrichten
+## One-time setup for direct task logs
 
-Der Abruf erfolgt vom **Zabbix-Webfrontend/PHP** zum PBS. Benötigt werden PHP-cURL und HTTPS-Zugriff vom Frontend auf PBS. Bei getrennten Servern/Containern reicht eine Verbindung nur vom Zabbix-Server oder Proxy nicht aus.
+Logs are retrieved from the **Zabbix frontend/PHP runtime** to PBS. This requires PHP cURL and HTTPS access from the frontend to PBS. When the server, proxy, and frontend run on different systems or in different containers, connectivity from only the Zabbix server or proxy is insufficient.
 
-Die geheimen Zabbix-Makros werden nicht ausgelesen. Eine Datei außerhalb des Webverzeichnisses ordnet erlaubten Zabbix-Host-IDs die PBS-Verbindung zu. Das vorhandene Monitoring-Token kann verwendet werden; für fremde Tasks benötigt es **Sys.Audit auf /system/tasks**, einschließlich der wirksamen Rechte bei aktivierter Token-Privilegientrennung.
+Secret Zabbix macros are not read. A file outside the web root maps allowed Zabbix host IDs to PBS connections. The existing monitoring token can be used; reading tasks belonging to other users requires effective **Sys.Audit on `/system/tasks`**, including the effective permissions when token privilege separation is enabled.
 
-Bei der ersten Einrichtung die Beispieldatei kopieren und mit **mcedit** bearbeiten. Die Gruppe `www-data` durch die tatsächliche PHP-FPM-/Webserver-Gruppe ersetzen, falls diese anders heißt. Falls `/etc/zabbix` fehlt, vorher anlegen; vorhandene Verzeichnisrechte unverändert lassen.
+For the initial setup, copy the example file and edit it with **mcedit**. Replace the `www-data` group with the actual PHP-FPM or webserver group when it differs. If `/etc/zabbix` does not exist, create it first without changing the permissions of an existing directory.
 
 ```sh
 install -m 0640 -o root -g www-data pbs-dashboard-1.0.5/config/pbs-dashboard.example.json /etc/zabbix/pbs-dashboard.json
 mcedit /etc/zabbix/pbs-dashboard.json
 ```
 
-Eine bereits vorhandene Konfigurationsdatei nur bearbeiten, nicht erneut mit der Vorlage überschreiben. Beispielinhalt (alle Werte ersetzen):
+Edit an existing configuration file in place; do not overwrite it with the example again. Example content—all values must be replaced:
 
 ```json
 {
@@ -48,52 +48,52 @@ Eine bereits vorhandene Konfigurationsdatei nur bearbeiten, nicht erneut mit der
     "12345": {
       "url": "https://pbs.example.invalid:8007",
       "token_id": "monitor@pbs!zabbix",
-      "token_secret": "DEIN_VORHANDENES_TOKEN_SECRET"
+      "token_secret": "REPLACE_WITH_THE_EXISTING_TOKEN_SECRET"
     }
   }
 }
 ```
 
-`12345` ist die **Zabbix-Host-ID des PBS-Hosts**, erkennbar beispielsweise als `hostid=12345` in der URL beim Bearbeiten des Hosts. Für weitere PBS-Hosts zusätzliche Einträge unter `hosts` ergänzen. Die URL ist die HTTPS-Basisadresse ohne API-Pfad. Zugangsdaten ausschließlich in diese geschützte Datei schreiben, niemals in Widget-Einstellungen oder JavaScript. Das Update-Skript überschreibt diese Datei nicht. In Containern die Datei dauerhaft in den Webfrontend-Container einbinden.
+`12345` is the **Zabbix host ID of the PBS host**, visible, for example, as `hostid=12345` in the host-edit URL. Add more entries below `hosts` for additional PBS hosts. The URL is the HTTPS base address without an API path. Write credentials only to this protected file, never to widget settings or JavaScript. The update script does not overwrite this file. In container deployments, mount the file persistently into the frontend container.
 
-TLS-Zertifikate werden geprüft. Bei eigener CA optional `"ca_file": "/etc/zabbix/pbs-ca.pem"` im Host-Eintrag ergänzen und die vertrauenswürdige CA-Datei für PHP lesbar ablegen. Der DNS-Name muss zum Zertifikat passen. Eine Abschaltung der Zertifikatsprüfung ist nicht vorgesehen.
+TLS certificates are verified. For a private CA, optionally add `"ca_file": "/etc/zabbix/pbs-ca.pem"` to the host entry and place the trusted CA file where PHP can read it. The DNS name must match the certificate. Disabling certificate verification is not supported.
 
-Jede Log-Anfrage prüft die Zabbix-Sitzung sowie Host- und Task-Item-Leserechte. **Wer den konfigurierten PBS-Host und dessen Task-Items in Zabbix lesen darf, kann dessen PBS-Task-Logs mit den Rechten des hinterlegten Tokens lesen.** Nur dafür gewünschte Host-Zuordnungen eintragen. Der Endpunkt kann keine PBS-Tasks stoppen, löschen oder starten.
+Every log request validates the Zabbix session and the user's host and task-item read permissions. **Anyone who can read the configured PBS host and its task items in Zabbix can read that host's PBS task logs with the permissions of the configured token.** Add only host mappings whose logs those users are intended to access. The endpoint cannot stop, delete, or start PBS tasks.
 
-Nach Einrichtung einen bekannten Task öffnen. HTTP 401/403: Token oder Berechtigungen prüfen. Verbindungs-/TLS-Hinweis: Erreichbarkeit und Zertifikat aus Sicht des PHP-Frontends prüfen. Bereits in PBS entfernte Logs können nicht aus der Zabbix-History rekonstruiert werden.
+After setup, open a known task. For HTTP 401/403, check the token and permissions. For a connection or TLS notice, check reachability and certificate trust from the PHP frontend's perspective. Logs already removed from PBS cannot be reconstructed from Zabbix history.
 
-## Bestehende Widgets und Summary-Filter
+## Existing widgets and Summary filter
 
-- **PBS Task Summary:** Failed/Warning/OK nach Kategorie und Details.
-- **PBS Longest Tasks:** längste abgeschlossene Tasks im gewählten Zeitraum.
-- **PBS Running Tasks:** laufende Tasks mit Laufzeiten.
-- **PBS Datastore:** aktuelle Kapazität, Belegung, Prognose und History-Kurve; dieses Widget enthält keine Tasks und daher keine Log-Funktion.
+- **PBS Task Summary:** Failed/Warning/OK counts by category with details.
+- **PBS Longest Tasks:** longest completed tasks in the selected period.
+- **PBS Running Tasks:** running tasks with their runtimes.
+- **PBS Datastore:** current capacity, usage, forecast, and history chart. This widget contains no tasks and therefore has no log function.
 
-Unter **PBS Task Summary → Bearbeiten → Tasks ausschließen (Expression)** ist weiterhin vorbelegt:
+The following expression remains preconfigured under **PBS Task Summary → Edit → Exclude tasks (expression)**:
 
 ```text
 worker_type === 'reader' && status === 'connection error: not connected'
 ```
 
-Pro Widget änderbar; **leeres Feld = keine Filterung**. Eigene gespeicherte Filter und leere Einstellungen bleiben erhalten. Nur die exakt passende Kombination entfällt aus Zählung und Details; `connection error: unexpected EOF` bleibt Other/Failed. Andere Widgets und Datenquellen sind davon unabhängig.
+It can be changed independently in each widget; **an empty field means no filtering**. Custom saved filters and empty settings remain unchanged. Only an exact match is removed from counts and details; `connection error: unexpected EOF` remains Other/Failed. Other widgets and data sources are unaffected.
 
-Felder: `worker_type`, `status`, `worker_id`, `user`, `node`. Operatoren: `===`, `!==`, `&&`, `||`, `!`, Klammern. Zeichenketten in einfachen/doppelten Anführungszeichen, exakte Groß-/Kleinschreibung, maximal 255 Bytes. Keine Ausführung von PHP/JavaScript. Fehlende Felder gelten als null; der bestehende Sammler liefert `user` nicht als separates Feld. Die Anzeige des Benutzers in Task List nutzt dafür die UPID.
+Fields: `worker_type`, `status`, `worker_id`, `user`, and `node`. Operators: `===`, `!==`, `&&`, `||`, `!`, and parentheses. Strings use single or double quotation marks, comparisons are case-sensitive, and the maximum length is 255 bytes. The expression does not execute PHP or JavaScript. Missing fields are treated as `null`; the existing collector does not provide `user` as a separate field, so Task List parses the displayed user from the UPID.
 
-## Neuinstallation
+## New installation
 
-Module wie oben installieren und alle fünf aktivieren. `templates/pbs-template-extended.yaml` importieren und dem PBS-Host zuweisen; Host-, Port- und Token-Makros konfigurieren. Bei vorhandenen Templates den Importvergleich prüfen, **Delete missing ausgeschaltet lassen** und eigene Anpassungen berücksichtigen. Die beiden Items **PBS dashboard: Collect completed tasks** und **PBS dashboard: Running tasks** mit **Execute now** starten. Unter Latest data Werte prüfen; eine erfolgreiche leere Task-Liste ist gültig. Widgets hinzufügen und direkte Logs separat wie oben einrichten.
+Install the modules as described above and enable all five. Import `templates/pbs-template-extended.yaml`, assign it to the PBS host, and configure the host, port, and token macros. For an existing template, review the import comparison, keep **Delete missing** disabled, and account for local customizations. Run **Execute now** for **PBS dashboard: Collect completed tasks** and **PBS dashboard: Running tasks**. Check their values under **Latest data**; a successful empty task list is valid. Add the widgets and configure direct logs separately as described above.
 
-## Daten und Grenzen
+## Data and limits
 
-Abgeschlossene Tasks werden alle fünf Minuten gesammelt, laufende jede Minute. Anfänglicher Rückblick: 48 Stunden, über `{$PBS.DASHBOARD.LOOKBACK.HOURS}` auf 1 bis 168 Stunden einstellbar. Danach wächst die History bis zur konfigurierten Aufbewahrung von 90 Tagen. Nicht gesammelte ältere PBS-Tasks fehlen weiterhin. Dashboard-Zeiträume sind auf 90 Tage begrenzt; Lücken werden angezeigt. Zabbix-Housekeeping und PBS-Aufbewahrung beeinflussen die Verfügbarkeit.
+Completed tasks are collected every five minutes and running tasks every minute. The initial lookback is 48 hours and can be configured from 1 to 168 hours with `{$PBS.DASHBOARD.LOOKBACK.HOURS}`. History then grows up to the configured 90-day retention period. Older PBS tasks that were never collected remain unavailable. Dashboard periods are limited to 90 days, and gaps are displayed. Zabbix housekeeping and PBS retention affect availability.
 
-Die 16 überlappenden Text-Snapshots werden nach UPID dedupliziert. Grenzen: 60.000 konservativ geschätzte JSON-Bytes pro Teil, 8 Millionen Zeichen PBS-Archivantwort. Überläufe werden gemeldet.
+The 16 overlapping text snapshots are deduplicated by UPID. Limits: 60,000 conservatively estimated JSON bytes per part and an 8-million-character PBS archive response. Overflows are reported.
 
-Logs werden nicht dauerhaft in Zabbix gespeichert. Pro Abruf maximal 500 Zeilen und 2 MiB; Verbindungszeitlimit 5 Sekunden, Gesamtzeitlimit 15 Sekunden. Die Anzeige ist auf 20.000 Zeilen bzw. 8 Millionen Zeichen je geöffnetem Log begrenzt und meldet das Erreichen der Grenze. Laufende Logs mit „Neu laden“ aktualisieren. Größere Logs direkt in PBS prüfen.
+Logs are not stored permanently in Zabbix. Each request returns at most 500 lines and 2 MiB, with a 5-second connection timeout and 15-second total timeout. The display is limited to 20,000 lines or 8 million characters per opened log and reports when the limit is reached. Use **Reload** to update a running log. Inspect larger logs directly in PBS.
 
-## Prüfung und Dateien
+## Verification and files
 
-Geprüft: PHP-/JavaScript-/Shell-Syntax, bestehende Regressionstests, Task-Reihenfolge, Benutzeranzeige, Filter, Log-Seiten, Eingabevalidierung, Berechtigungsentscheidungen und HTTP-Fehler mit simuliertem Transport. DOM-Tests prüfen die vier Task-Widgets mit simulierten Antworten. Installation/Upgrade werden in einem nachgebildeten Frontend geprüft. PHP-Tests laufen in einer WebAssembly-Laufzeit. Eine echte Browser-Vorschau war in der Build-Umgebung gesperrt. **Kein Live-Test in einer laufenden Zabbix-/PBS-Installation.**
+Verified: PHP, JavaScript, and shell syntax; existing regression tests; task ordering; user display; filters; log pages; input validation; authorization decisions; and HTTP errors using a simulated transport. DOM tests cover all four task widgets with simulated responses. Installation and upgrade are tested against a simulated frontend. PHP tests run in a WebAssembly runtime. A real browser preview was unavailable in the build environment. **No live test was performed against a running Zabbix/PBS installation.**
 
 ```sh
 php tests/test.php
@@ -106,6 +106,6 @@ php tests/test-log-transport.php
 node tests/test-collector.cjs
 ```
 
-Enthalten: `modules/` (fünf vollständige Widgets), `templates/`, `collector/`, `config/pbs-dashboard.example.json` (ohne echte Zugangsdaten), `update.sh`, `tests/`, `SHA256SUMS`, `LICENSE` und diese README.
+Included: `modules/` with five complete widgets, `templates/`, `collector/`, `config/pbs-dashboard.example.json` without real credentials, `update.sh`, `tests/`, `SHA256SUMS`, `LICENSE`, and this README.
 
-Referenzen: [PBS Task-/Log-API](https://github.com/proxmox/proxmox-backup/blob/master/src/api2/node/tasks.rs), [Zabbix-Modulaktionen](https://github.com/zabbix/zabbix/blob/release/7.0/ui/include/classes/core/CModuleManager.php).
+References: [PBS task/log API](https://github.com/proxmox/proxmox-backup/blob/master/src/api2/node/tasks.rs) and [Zabbix module actions](https://github.com/zabbix/zabbix/blob/release/7.0/ui/include/classes/core/CModuleManager.php).

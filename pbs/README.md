@@ -2,7 +2,7 @@
 
 Five custom Zabbix dashboard widgets for monitoring Proxmox Backup Server (PBS), together with an extended Zabbix template, data collectors, an installation/update script, and configuration examples.
 
-This directory contains the unmodified **PBS Dashboard 1.0.5** source package. The included template is exported in the **Zabbix 7.4** format.
+This directory contains the **PBS Dashboard 1.0.5** source package. Its runtime code, template, collectors, installer, tests, and configuration example are preserved as supplied; only the package README was translated from German to English for this repository. The included template is exported in the **Zabbix 7.4** format.
 
 ## Contents
 
@@ -60,7 +60,7 @@ If the Zabbix server, proxy, and frontend run on different systems or in differe
 pbs/
 ├── README.md                 # This project-specific guide
 ├── assets/                   # README screenshots
-└── source/                   # Unmodified PBS Dashboard 1.0.5 package
+└── source/                   # PBS Dashboard 1.0.5 package
     ├── collector/            # Zabbix JavaScript task collectors
     ├── config/               # Direct-log connection example
     ├── modules/              # Five Zabbix frontend modules
@@ -72,7 +72,7 @@ pbs/
     └── update.sh             # Module installer/updater
 ```
 
-The files below `source/` are preserved exactly as supplied. `source/SHA256SUMS` can be used to verify them.
+The runtime and deployment files below `source/` are preserved exactly as supplied. `source/README.md` is an English translation of the supplied German document, and its entry in `source/SHA256SUMS` reflects the translated repository copy. Use the checksum manifest to verify the complete current tree.
 
 ## Installation
 
