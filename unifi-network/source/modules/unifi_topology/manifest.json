@@ -4,7 +4,7 @@
   "type": "widget",
   "name": "UniFi Network Topology",
   "namespace": "UniFiTopology",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "author": "Local extension",
   "description": "Read-only UniFi topology with per-device RX/TX history, expandable endpoints and Zabbix problem severity.",
   "widget": {
@@ -12,11 +12,25 @@
       "width": 24,
       "height": 9
     },
-    "js_class": "CWidgetUniFiTopology"
+    "js_class": "CWidgetUniFiTopology",
+    "in": {
+      "time_period": {
+        "type": "_timeperiod"
+      }
+    },
+    "out": [
+      {
+        "type": "_timeperiod"
+      }
+    ]
   },
   "actions": {
     "widget.unifi_topology.view": {
       "class": "WidgetView"
+    },
+    "widget.unifi_topology.traffic": {
+      "class": "TrafficGraph",
+      "layout": "layout.json"
     }
   },
   "assets": {

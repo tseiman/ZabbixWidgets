@@ -1,10 +1,17 @@
 # UniFi Topology — Dashboard Widget for Zabbix 7.4
 
-Version 0.3.4 · English/German UI, RX/TX history, and configurable manual devices and links
+Version 0.3.5 · native Zabbix Graph time selection, English/German UI, RX/TX history, and configurable manual devices and links
 
 The widget reads the `UniFi topology: Raw JSON` text item and renders the network devices. Zabbix history from traffic items discovered by the supplied template provides per-device RX/TX mini charts and an expandable dialog. Selecting the rest of a node opens its directly attached clients, network links, and Zabbix problems. The frontend does not create or modify maps, hosts, items, or triggers and does not contact UniFi directly.
 
-## Changes in 0.3.4
+## Changes in 0.3.5
+
+- Replaces the hand-drawn expanded traffic chart with Zabbix 7.4's native modern SVG Graph component (not Graph (classic)).
+- Supports horizontal drag selection in the expanded graph and applies the selected period to the complete dashboard through Zabbix's normal time-period feedback and broadcast path.
+- Keeps the expanded graph bound to the same device across the dashboard refresh caused by a time selection.
+- Resolves graph item IDs server-side from the readable topology item's host and exact MAC-bound keys; the browser cannot nominate arbitrary item IDs.
+
+## Changes retained from 0.3.4
 
 - Uses a bundled module-local catalog instead of relying on Zabbix core gettext entries for custom widget text.
 - Selects German for logged-in user languages `de`, `de_DE`, and `de-DE`; English and unsupported languages fall back to English.
@@ -20,7 +27,7 @@ The widget reads the `UniFi topology: Raw JSON` text item and renders the networ
 ## Changes retained from 0.3.1
 
 - Every automatically discovered UniFi network device has its own MAC-bound mini chart in the upper-right corner. Pure SVG positioning prevents global Zabbix button rules from moving charts outside their device cards.
-- Mini and large charts use translucent green area fills.
+- Mini charts retain their translucent green area fills; the expanded graph uses native Zabbix line and fill rendering.
 - Orange UniFi warnings include a **×**. Dismissal lasts only for the current dashboard page; a full reload shows the warning again.
 
 ## Installation and update
@@ -90,7 +97,7 @@ Version 0.3.0 and later require the supplied template. Import `template/unifi_ne
 
 Blue shows RX and green shows TX. The template prefers the sum of `rx_bytes-r` and `tx_bytes-r` over every unique physical port and converts byte/s to bit/s. If those values are absent, Zabbix uses the change per second of summed `rx_bytes` and `tx_bytes` counters. Logical LAG, bond, and aggregate interfaces and duplicate port indexes are excluded. For an access point without a usable `port_table`, the physical `uplink` is the fallback source.
 
-**Traffic time period** follows the dashboard time selector by default. The backend retrieves bounded Zabbix history or trend aggregates with at most 320 points per underlying item. An automatically discovered UniFi device without matching history retains an empty chart and reports that no data is available. A manually added topology node receives no traffic chart.
+**Traffic time period** follows the dashboard time selector by default. Mini charts use bounded Zabbix history or trend aggregates with at most 320 points per underlying item. The expanded dialog uses the native Zabbix SVG Graph. Drag horizontally across its plotting area to select a narrower time period for the whole dashboard; the dialog reopens for the same device after the linked widgets refresh. An automatically discovered UniFi device without matching history retains its mini-chart control and reports that no data is available. A manually added topology node receives no traffic chart.
 
 ## Mapping topology devices to Zabbix hosts
 

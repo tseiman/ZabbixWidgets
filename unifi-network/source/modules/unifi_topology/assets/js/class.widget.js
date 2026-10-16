@@ -1,7 +1,8 @@
-/* UniFi Topology widget, Zabbix 7.4. No external libraries or network requests. */
+/* UniFi Topology widget, Zabbix 7.4. Read-only requests use the current frontend session. */
 class UniFiTopologyView {
-    constructor(root, locale = 'en-US') {
+    constructor(root, locale = 'en-US', widget = null) {
         this.root = root;
+        this.widget = widget;
         this.selected = null;
         this.data = null;
         this.zoom = 1;
@@ -237,9 +238,12 @@ class UniFiTopologyView {
         });
         return mini;
     }
-    _closeTraffic() {
+    _closeTraffic(preserve = false) {
+        this.widget?._deactivateTrafficGraph();
         const dialog = this.trafficDialog;
         this.trafficDialog = null;
+        if (preserve && dialog) dialog.dataset.preserve = '1';
+        else if (this.widget) this.widget._utTrafficOpenMac = null;
         if (dialog?.isConnected) {
             if (dialog.open) dialog.close();
             dialog.remove();
@@ -248,6 +252,7 @@ class UniFiTopologyView {
     _openTraffic(node, activator = null) {
         this._closeTraffic();
         if (!this.data?.traffic_period) return;
+        if (this.widget) this.widget._utTrafficOpenMac = node.mac;
 
         const dialog = document.createElement('dialog');
         dialog.className = 'ut-traffic-dialog';
@@ -271,50 +276,10 @@ class UniFiTopologyView {
         dialog.append(legend);
 
         const period = this.data.traffic_period;
-        const all = this._trafficPoints(node).map(point => Number(point[1])).filter(Number.isFinite);
-        if (!all.length) {
-            dialog.append(this.el('p', t('No traffic data is available for this time period.'), 'ut-traffic-empty'));
-        }
-        else {
-            const maximum = this._niceMaximum(Math.max(1, ...all));
-            const view = {width: 900, height: 380};
-            const dimensions = {left: 82, top: 18, width: 792, height: 300};
-            const graph = this.svg('svg', {viewBox: '0 0 ' + view.width + ' ' + view.height, role: 'img',
-                'aria-label': this.format(t('RX and TX throughput for {name}'), {name: node.name})});
-            graph.classList.add('ut-traffic-chart');
-            for (let i = 0; i <= 5; i++) {
-                const y = dimensions.top + dimensions.height * i / 5;
-                const value = maximum * (1 - i / 5);
-                graph.append(this.svg('line', {x1: dimensions.left, y1: y, x2: dimensions.left + dimensions.width, y2: y, class: 'ut-traffic-grid'}));
-                graph.append(this.svg('text', {x: dimensions.left - 10, y: y + 4, 'text-anchor': 'end', class: 'ut-traffic-axis'}, this._formatBits(value)));
-            }
-            const duration = period.to - period.from;
-            for (let i = 0; i <= 5; i++) {
-                const clock = period.from + duration * i / 5;
-                const x = dimensions.left + dimensions.width * i / 5;
-                const date = new Date(clock * 1000);
-                const label = duration > 172800
-                    ? date.toLocaleDateString(this.locale, {month: 'short', day: '2-digit'})
-                    : date.toLocaleTimeString(this.locale, {hour: '2-digit', minute: '2-digit'});
-                graph.append(this.svg('text', {x, y: dimensions.top + dimensions.height + 28, 'text-anchor': i === 0 ? 'start' : i === 5 ? 'end' : 'middle', class: 'ut-traffic-axis'}, label));
-            }
-            for (const direction of ['rx', 'tx']) {
-                for (const area of this._seriesAreaPaths(node.traffic?.[direction]?.points, dimensions, period, maximum)) {
-                    graph.append(this.svg('path', {d: area, class: 'ut-traffic-area ut-traffic-area-' + direction}));
-                }
-            }
-            const rx = this._seriesPath(node.traffic?.rx?.points, dimensions, period, maximum);
-            const tx = this._seriesPath(node.traffic?.tx?.points, dimensions, period, maximum);
-            if (rx) graph.append(this.svg('path', {d: rx, class: 'ut-traffic-line ut-traffic-rx ut-traffic-line-large'}));
-            if (tx) graph.append(this.svg('path', {d: tx, class: 'ut-traffic-line ut-traffic-tx ut-traffic-line-large'}));
-            for (const [direction, css] of [['rx', 'ut-traffic-marker-rx'], ['tx', 'ut-traffic-marker-tx']]) {
-                const marker = this._seriesMarker(node.traffic?.[direction]?.points, dimensions, period, maximum);
-                if (marker) graph.append(this.svg('circle', {cx: marker.x, cy: marker.y, r: 3.5, class: css}));
-            }
-            const graphScroll = this.el('div', null, 'ut-traffic-chart-scroll');
-            graphScroll.append(graph);
-            dialog.append(graphScroll);
-        }
+        const graphSurface = this.el('div', t('Loading traffic graph …'), 'ut-traffic-native');
+        graphSurface.setAttribute('role', 'status');
+        graphSurface.setAttribute('aria-live', 'polite');
+        dialog.append(graphSurface);
 
         const source = direction => node.traffic?.[direction]
             ? (node.traffic[direction].source === 'direct' ? t('controller port rates') : t('from port counter differences'))
@@ -324,10 +289,17 @@ class UniFiTopologyView {
         dialog.append(this.el('p', from + ' – ' + to + ' · RX: ' + source('rx') + ' · TX: ' + source('tx'), 'ut-traffic-footnote'));
 
         dialog.addEventListener('close', () => {
-            if (this.trafficDialog === dialog) this.trafficDialog = null;
+            const wasCurrent = this.trafficDialog === dialog;
+            if (wasCurrent) {
+                this.trafficDialog = null;
+                this.widget?._deactivateTrafficGraph();
+                if (dialog.dataset.preserve !== '1' && this.widget) {
+                    this.widget._utTrafficOpenMac = null;
+                }
+            }
             dialog.remove();
-            if (activator?.isConnected) activator.focus();
-        });
+            if (wasCurrent && dialog.dataset.preserve !== '1' && activator?.isConnected) activator.focus();
+        }, { once: true });
         dialog.addEventListener('click', event => {
             if (event.target === dialog) {
                 const box = dialog.getBoundingClientRect();
@@ -338,6 +310,7 @@ class UniFiTopologyView {
         document.body.append(dialog);
         dialog.showModal();
         close.focus();
+        this.widget?._loadTrafficGraph(node, graphSurface, dialog);
     }
     _dismissibleWarning(warning) {
         const notice = this.el('div', null, 'ut-notice ut-notice-dismissible');
@@ -535,6 +508,11 @@ class CWidgetUniFiTopology extends CWidget {
     onInitialize() {
         this._utView = null;
         this._utTimer = null;
+        this._utTrafficContext = null;
+        this._utTrafficAbort = null;
+        this._utTrafficSvg = null;
+        this._utTrafficOpenMac = null;
+        this._utRestoreTrafficMac = null;
     }
     onActivate() {
         this._utTimer = setInterval(() => this._utView?.tick(), 10000);
@@ -542,6 +520,8 @@ class CWidgetUniFiTopology extends CWidget {
     onDeactivate() {
         clearInterval(this._utTimer);
         this._utTimer = null;
+        this._utRestoreTrafficMac = null;
+        this._utTrafficOpenMac = null;
         this._utView?._closeTraffic();
     }
     onDestroy() {
@@ -549,8 +529,10 @@ class CWidgetUniFiTopology extends CWidget {
         this._utView = null;
     }
     onClearContents() {
-        this._utView?._closeTraffic();
+        this._utRestoreTrafficMac = this._utView?.trafficDialog ? this._utTrafficOpenMac : null;
+        this._utView?._closeTraffic(true);
         this._utView = null;
+        this._utTrafficContext = null;
     }
     onFeedback({type, value}) {
         if (type === CWidgetsData.DATA_TYPE_TIME_PERIOD && this.getFieldsReferredData().has('time_period')) {
@@ -561,23 +543,156 @@ class CWidgetUniFiTopology extends CWidget {
         return false;
     }
     setContents(response) {
+        const reopen = this._utView?.trafficDialog ? this._utTrafficOpenMac : this._utRestoreTrafficMac;
+        this._utTrafficContext = response.traffic_graph || null;
         if (!this._utView || !this._body.contains(this._utView.root)) {
             const root = document.createElement('div');
             this._body.replaceChildren(root);
-            this._utView = new UniFiTopologyView(root, response.locale);
+            this._utView = new UniFiTopologyView(root, response.locale, this);
         }
         this._utView.locale = response.locale === 'de-DE' ? 'de-DE' : 'en-US';
-        if (response.topology_error || !response.topology) this._utView.showError(response.topology_error || t('No topology data was received.'));
-        else this._utView.setData(response.topology);
+        if (response.topology_error || !response.topology) {
+            this._utRestoreTrafficMac = null;
+            this._utView.showError(response.topology_error || t('No topology data was received.'));
+        }
+        else {
+            this._utView.setData(response.topology);
+            this._utRestoreTrafficMac = null;
+            const node = reopen ? response.topology.nodes.find(candidate => candidate.mac === reopen) : null;
+            if (node?.traffic) this._utView._openTraffic(node);
+        }
     }
     processUpdateErrorResponse(error) {
+        this._utRestoreTrafficMac = null;
         this._utView?.showError(t('Status could not be updated. No current problem assessment is available.'));
         super.processUpdateErrorResponse(error);
     }
     promiseUpdate() {
+        const time_period = this.getFieldsData().time_period;
+        if (!this.hasBroadcast(CWidgetsData.DATA_TYPE_TIME_PERIOD)
+                || this.isFieldsReferredDataUpdated('time_period')) {
+            this.broadcast({[CWidgetsData.DATA_TYPE_TIME_PERIOD]: time_period});
+        }
         return super.promiseUpdate().catch(error => {
             if (error.name !== 'AbortError') this._utView?.showError(t('Connection to the Zabbix frontend failed. Status unknown.'));
             throw error;
         });
+    }
+    _deactivateTrafficGraph() {
+        this._utTrafficAbort?.abort();
+        this._utTrafficAbort = null;
+        if (this._utTrafficSvg && typeof jQuery !== 'undefined' && typeof jQuery.fn.svggraph === 'function') {
+            const graph = jQuery(this._utTrafficSvg);
+            if (typeof hintBox !== 'undefined' && typeof hintBox.hideHint === 'function') {
+                try {
+                    // Frozen native hints pause their owner; use their delete lifecycle to resume it.
+                    hintBox.hideHint(graph, true);
+                }
+                catch (error) {
+                    // The hint may already have been removed by the global overlay stack.
+                }
+            }
+            try {
+                graph.svggraph('deactivate');
+            }
+            catch (error) {
+                // A partially initialized graph has no listeners that still need cleanup.
+            }
+        }
+        this._utTrafficSvg = null;
+    }
+    async _loadTrafficGraph(node, surface, dialog) {
+        this._deactivateTrafficGraph();
+        const context = this._utTrafficContext;
+        const period = context?.time_period;
+        if (!context?.action || !context.topology_itemid || !period?.from || !period?.to) {
+            surface.textContent = t('Refresh the widget; traffic graph context is missing.');
+            return;
+        }
+        if (typeof jQuery === 'undefined' || typeof jQuery.fn.svggraph !== 'function') {
+            surface.textContent = t('The native Zabbix graph component is unavailable.');
+            return;
+        }
+
+        const controller = new AbortController();
+        this._utTrafficAbort = controller;
+        const timeout = setTimeout(() => controller.abort(), 20000);
+        try {
+            const url = new URL('zabbix.php', window.location.href);
+            url.searchParams.set('action', context.action);
+            const surfaceStyle = getComputedStyle(surface);
+            const horizontalPadding = parseFloat(surfaceStyle.paddingLeft) + parseFloat(surfaceStyle.paddingRight);
+            const width = Math.max(320, Math.min(1800,
+                Math.round((surface.clientWidth || 860) - horizontalPadding)));
+            const height = Math.max(220, Math.min(800, Math.round(window.innerHeight * 0.52)));
+            const source = direction => {
+                const selected = node.traffic?.[direction]?.source;
+                return selected === 'direct' ? 'rate' : selected === 'counter' ? 'counter' : 'auto';
+            };
+            const response = await fetch(url, {
+                method: 'POST',
+                credentials: 'same-origin',
+                cache: 'no-store',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    topology_itemid: context.topology_itemid,
+                    mac: node.mac,
+                    rx_source: source('rx'),
+                    tx_source: source('tx'),
+                    from: period.from,
+                    to: period.to,
+                    width,
+                    height
+                }),
+                signal: controller.signal
+            });
+            if (!response.ok) {
+                throw new Error(t('Traffic graph request failed (HTTP %d).').replace('%d', response.status));
+            }
+            const result = await response.json();
+            if (result.error) {
+                throw new Error((result.error.messages || [t('The traffic graph could not be generated.')]).join(' '));
+            }
+            if (typeof result.svg !== 'string' || !result.svg_options?.data) {
+                throw new Error(t('Invalid traffic graph response.'));
+            }
+
+            const parsed = new DOMParser().parseFromString(result.svg, 'image/svg+xml');
+            if (parsed.querySelector('parsererror') || parsed.documentElement.localName !== 'svg') {
+                throw new Error(t('Invalid traffic graph response.'));
+            }
+            if (controller.signal.aborted || !dialog.isConnected || !surface.isConnected) return;
+
+            const svg = document.importNode(parsed.documentElement, true);
+            svg.classList.add('ut-traffic-chart');
+            surface.removeAttribute('role');
+            surface.removeAttribute('aria-live');
+            surface.replaceChildren(svg);
+            this._svg = svg;
+            this._svg_options = {
+                sbox: true,
+                show_problems: false,
+                show_simple_triggers: false,
+                hint_max_rows: 20,
+                min_period: 60,
+                ...result.svg_options.data
+            };
+            this._utTrafficSvg = svg;
+            jQuery(svg).svggraph(this);
+            jQuery(svg).svggraph('activate');
+        }
+        catch (error) {
+            if (!surface.isConnected || this._utTrafficAbort !== controller) return;
+            surface.textContent = error.name === 'AbortError'
+                ? t('Traffic graph request timed out. Please reopen the graph.')
+                : error instanceof SyntaxError
+                    ? t('Invalid traffic graph response.')
+                    : error.message;
+            surface.setAttribute('role', 'alert');
+        }
+        finally {
+            clearTimeout(timeout);
+            if (this._utTrafficAbort === controller) this._utTrafficAbort = null;
+        }
     }
 }

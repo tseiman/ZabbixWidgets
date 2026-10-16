@@ -24,6 +24,11 @@ class WidgetView extends CControllerDashboardWidgetView {
             'name' => $this->getInput('name', $this->widget->getName()),
             'topology' => $topology,
             'topology_error' => $error,
+            'traffic_graph' => [
+                'action' => 'widget.unifi_topology.traffic',
+                'topology_itemid' => (string) reset($this->fields_values['itemid']),
+                'time_period' => $this->fields_values['time_period']
+            ],
             'locale' => I18n::locale(),
             'user' => ['debug_mode' => $this->getDebugMode()]
         ]));

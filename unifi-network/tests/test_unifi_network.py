@@ -186,19 +186,60 @@ class WidgetTrafficContractTest(unittest.TestCase):
         self.assertIn("activator.focus()", js)
         self.assertIn(".ut-traffic-mini:focus-visible", css)
 
-    def test_frontend_fills_charts_green_and_opens_pbs_style_overlay(self):
+    def test_frontend_fills_mini_charts_green_and_opens_native_overlay(self):
         js = (MODULE / "assets/js/class.widget.js").read_text()
         css = (MODULE / "assets/css/widget.css").read_text()
         manifest = json.loads((MODULE / "manifest.json").read_text())
         self.assertIn("_seriesAreaPaths", js)
         self.assertIn("ut-traffic-area", js)
         self.assertRegex(css, r"\.ut-traffic-area\{[^}]*fill:rgba\(44,153,117,")
-        self.assertRegex(css, r"\.ut-traffic-chart\{[^}]*box-sizing:border-box")
+        self.assertRegex(css, r"\.ut-traffic-native\{[^}]*box-sizing:border-box")
         self.assertIn("document.body.append(dialog)", js)
         self.assertIn("dialog.showModal()", js)
         self.assertIn("dialog.ut-traffic-dialog", css)
         self.assertIn("::backdrop", css)
-        self.assertEqual(manifest["version"], "0.3.4")
+        self.assertEqual(manifest["version"], "0.3.5")
+
+    def test_native_zabbix_svg_graph_drives_the_large_overlay_and_dashboard_time_zoom(self):
+        js = (MODULE / "assets/js/class.widget.js").read_text()
+        css = (MODULE / "assets/css/widget.css").read_text()
+        manifest = json.loads((MODULE / "manifest.json").read_text())
+
+        self.assertIn("widget.unifi_topology.traffic", manifest["actions"])
+        self.assertEqual(manifest["actions"]["widget.unifi_topology.traffic"]["class"], "TrafficGraph")
+        self.assertEqual(manifest["actions"]["widget.unifi_topology.traffic"]["layout"], "layout.json")
+        self.assertEqual(manifest["widget"]["in"]["time_period"]["type"], "_timeperiod")
+        self.assertIn({"type": "_timeperiod"}, manifest["widget"]["out"])
+        self.assertEqual(manifest["version"], "0.3.5")
+        self.assertIn("_loadTrafficGraph", js)
+        self.assertIn("jQuery(svg).svggraph(this)", js)
+        self.assertIn("hasBroadcast(CWidgetsData.DATA_TYPE_TIME_PERIOD)", js)
+        self.assertIn("this._utView?.trafficDialog ? this._utTrafficOpenMac : this._utRestoreTrafficMac", js)
+        self.assertIn("this._utRestoreTrafficMac = null", js)
+        self.assertIn("hintBox.hideHint(graph, true)", js)
+        self.assertIn("graph.svggraph('deactivate')", js)
+        self.assertIn("result.svg_options.data", js)
+        self.assertIn("credentials: 'same-origin'", js)
+        self.assertIn("selected === 'counter' ? 'counter' : 'auto'", js)
+        self.assertIn("traffic_graph", js)
+        self.assertNotIn("ut-traffic-grid", js)
+        self.assertIn(".ut-traffic-native", css)
+
+    def test_native_graph_endpoint_resolves_only_readable_items_for_the_selected_topology_host(self):
+        action = (MODULE / "actions/TrafficGraph.php").read_text()
+
+        self.assertIn("class TrafficGraph extends CController", action)
+        self.assertIn("POST_CONTENT_TYPE_JSON", action)
+        self.assertIn("disableCsrfValidation", action)
+        self.assertIn("Topology::mac", action)
+        self.assertIn("'itemids' => [$topology_itemid]", action)
+        self.assertIn("'hostids' => [$topology_item['hostid']]", action)
+        self.assertIn("'webitems' => true", action)
+        self.assertIn("unifi.device.%s.%s.bps[%s]", action)
+        self.assertIn("$source === 'auto' ? ['rate', 'counter']", action)
+        self.assertIn("CSvgGraphHelper::get", action)
+        self.assertIn("'sbox' => true", action)
+        self.assertNotIn("traffic_itemid", action)
 
     def test_unknown_switch_warning_is_dismissible_only_for_widget_lifetime(self):
         js = (MODULE / "assets/js/class.widget.js").read_text()

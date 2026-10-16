@@ -2,7 +2,7 @@
 
 A read-only Zabbix 7.4 dashboard widget that visualizes a UniFi Network topology, links network devices to Zabbix hosts, overlays the current Zabbix problem severity, and shows per-device RX/TX traffic history. The accompanying template collects both topology and per-port device statistics from the UniFi controller.
 
-This directory contains **UniFi Network Topology 0.3.4** and its **Zabbix 7.4** template. Version 0.3.4 adds module-local English and German frontend translations selected from the logged-in Zabbix user's language. German variants (`de`, `de_DE`, and `de-DE`) use German; English and unsupported languages use the English source fallback. The manual-only traffic-chart rule from 0.3.3 is unchanged: every automatically discovered device retains its mini chart.
+This directory contains **UniFi Network Topology 0.3.5** and its **Zabbix 7.4** template. Version 0.3.5 renders the expanded RX/TX dialog with Zabbix's native modern SVG Graph component. Dragging over its X axis selects a period and updates the dashboard-wide time selector. Version 0.3.4 added module-local English and German frontend translations selected from the logged-in Zabbix user's language. German variants (`de`, `de_DE`, and `de-DE`) use German; English and unsupported languages use the English source fallback. Manually added nodes still have no traffic icon, while every automatically discovered UniFi device retains its mini chart.
 
 ## Contents
 
@@ -29,7 +29,7 @@ This directory contains **UniFi Network Topology 0.3.4** and its **Zabbix 7.4** 
 - Displays automatic wired and wireless connections from the UniFi topology response.
 - Shows port numbers, link rates, SSIDs, channels, and experience values when UniFi supplies them.
 - Shows a compact, individually bound RX/TX chart in the upper-right corner of every automatically discovered UniFi network node; nodes without history open an explicit empty state instead of fabricated values. Manually added topology nodes do not receive a traffic icon.
-- Opens an accessible, automatically scaled RX/TX chart dialog using the current dashboard time period.
+- Opens an accessible native Zabbix SVG Graph for RX/TX using the current dashboard time period; drag-selecting its X axis updates the time period for the complete dashboard.
 - Expands a selected device to show directly attached clients, network links, and open Zabbix problems.
 - Uses Zabbix's configured severity names and colors.
 - Supports exact automatic host-name mapping and explicit MAC-to-host-ID mapping.
@@ -75,7 +75,7 @@ unifi-network/
 ├── tests/                                        # Regression and package-installation tests
 └── source/
     ├── docs/original/                            # Supplied historical Markdown documents
-    ├── modules/unifi_topology/                   # Widget source 0.3.4
+    ├── modules/unifi_topology/                   # Widget source 0.3.5
     │   ├── actions/
     │   ├── assets/
     │   ├── includes/
@@ -207,9 +207,9 @@ The widget displays only topology nodes whose JSON `type` is `DEVICE` in the mai
 
 ## Traffic charts and data
 
-Each switch or access point with collected history receives a small chart in the upper-right corner of its topology node. Blue is RX and green is TX. Select the chart with a pointer, or focus it and press **Enter** or **Space**, to open the larger dialog. The dialog uses the same time period as the mini chart and automatically chooses a readable linear bit/s scale.
+Each switch or access point with collected history receives a small chart in the upper-right corner of its topology node. Blue is RX and green is TX. Select the chart with a pointer, or focus it and press **Enter** or **Space**, to open the larger dialog. The dialog uses Zabbix 7.4's modern native SVG Graph component (not Graph (classic)), follows the same dashboard time period as the mini chart, and automatically chooses a readable linear bit/s scale. Drag horizontally over the plotting area to select a narrower period. Zabbix applies that period to the dashboard-wide time selector and refreshes all widgets linked to it; the UniFi dialog reopens for the same device after the refresh.
 
-The widget does not query UniFi from the browser. It resolves the traffic items on the same controller host as the selected topology master item, then uses Zabbix's history manager to retrieve bounded, pixel-width-aggregated data. Detailed history is used while retained; older dashboard periods use Zabbix trends. A direction with no data is omitted, and a node receives no chart until at least one direction has history.
+The widget does not query UniFi from the browser. Mini-chart data is resolved on the same controller host as the selected topology master item and retrieved through Zabbix's history manager as bounded, pixel-width-aggregated data. For the expanded graph, a read-only module action resolves only the exact RX/TX items on that same readable host and passes them to Zabbix's native `CSvgGraphHelper`; client-supplied traffic item IDs are not accepted. Detailed history is used while retained and older dashboard periods use Zabbix trends. A direction with no data is omitted, but every automatically discovered node retains its traffic control even when the selected period contains no history.
 
 Traffic calculation rules:
 
