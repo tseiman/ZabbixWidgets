@@ -1,38 +1,34 @@
-# UniFi Topologie – Dashboard-Widget für Zabbix 7.4
+# UniFi Topology — Dashboard Widget for Zabbix 7.4
 
-Version 0.3.3 · Mit RX/TX-Verlauf, konfigurierbaren manuellen Geräten und Verbindungen
+Version 0.3.3 · RX/TX history and configurable manual devices and links
 
-Das Widget liest das Text-Item „UniFi topology: Raw JSON“ und zeichnet die Netzwerkgeräte. Die Zabbix-History der vom mitgelieferten Template entdeckten Traffic-Items liefert kleine RX/TX-Diagramme und einen vergrößerbaren Dialog. Automatisch entdeckte UniFi-Geräte behalten ihr Traffic-Icon; ausschließlich manuell hinzugefügte Topologieknoten ohne UniFi-Trafficinformationen erhalten keines. Ein Klick auf den übrigen Knoten öffnet dessen Endgeräte, Netzwerkverbindungen und Zabbix-Probleme. Das Frontend schreibt keine Maps, Hosts, Items oder Trigger und ruft UniFi nicht direkt ab.
+The widget reads the `UniFi topology: Raw JSON` text item and renders the network devices. Zabbix history from traffic items discovered by the supplied template provides per-device RX/TX mini charts and an expandable dialog. Selecting the rest of a node opens its directly attached clients, network links, and Zabbix problems. The frontend does not create or modify maps, hosts, items, or triggers and does not contact UniFi directly.
 
-## Korrekturen in 0.3.1
+## Changes in 0.3.3
 
-- Jedes Netzwerkelement besitzt rechts oben einen eigenen, eindeutig über seine MAC-Adresse gebundenen Mini-Graphen. Die reine SVG-Darstellung bleibt auch unter den globalen Zabbix-Button-Stilen in ihrem Gerätekasten.
-- Mini- und Großdiagramme besitzen eine transparente grüne Flächenfüllung.
-- Orange UniFi-Warnungen haben rechts ein **×**. Das Schließen gilt nur für die aktuelle Dashboard-Seite; nach einem vollständigen Neuladen erscheint die Warnung erneut.
+- Manually added topology nodes, such as a LANCOM device not managed by UniFi, have no traffic chart icon because UniFi supplies no traffic information for them.
+- Every automatically discovered UniFi switch, access point, and other network device retains its traffic chart icon. The decision does not depend on a separate `unifiDevice` or `managed` property.
+- Devices without history in the selected period retain their chart icon and display the existing no-data state instead of fabricated values.
 
-## Neu in 0.3.0
+## Changes retained from 0.3.1
 
-- Jeder Switch und Access Point erhält rechts oben einen eigenen RX/TX-Mini-Graphen. Ohne gesammelte Daten bleibt er leer und öffnet den Hinweis, dass im gewählten Zeitraum keine Daten verfügbar sind.
-- Klick sowie Enter/Leertaste öffnen einen automatisch skalierten Dialog im Stil der Zabbix-Overlays.
-- Mini- und Großdiagramm folgen standardmäßig dem Zeitraum des Dashboards.
-- Das aktualisierte Template erfasst direkte Port-Raten und eine aus Byte-Zählern berechnete Ausweichserie.
-- Es werden keine externen JavaScript-Bibliotheken oder Browser-Anfragen an UniFi verwendet.
+- Every automatically discovered UniFi network device has its own MAC-bound mini chart in the upper-right corner. Pure SVG positioning prevents global Zabbix button rules from moving charts outside their device cards.
+- Mini and large charts use translucent green area fills.
+- Orange UniFi warnings include a **×**. Dismissal lasts only for the current dashboard page; a full reload shows the warning again.
 
-Die in 0.2.0 eingeführten optionalen manuellen Geräte und Verbindungen bleiben unverändert verfügbar. Syntax und Beispiele stehen in `MANUAL_TOPOLOGY.md`.
+## Installation and update
 
-## Installation und Update
+The rolling installable archive is rebuilt whenever `unifi-network/` changes. It contains:
 
-Das installierbare Archiv wird bei jeder Änderung unter `unifi-network/` automatisch neu gebaut. Es enthält:
+- `install.sh` — installer for new installations and updates;
+- `module/` — only the widget runtime files;
+- `template/unifi_network_topology_zabbix74.yaml` — imported separately into Zabbix.
 
-- `install.sh` – Installer für Neuinstallation und Update,
-- `module/` – ausschließlich die benötigten Laufzeitdateien des Widgets,
-- `template/unifi_network_topology_zabbix74.yaml` – separat in Zabbix zu importierendes Template.
-
-`README*.md` und andere Markdown-Dateien sind weder im Archiv noch im installierten Modul enthalten. Die aktuelle Version steht auf der GitHub-Release-Seite:
+Markdown source documents are not included in the archive or installed module. Download the current archive and matching `.sha256` file from:
 
 https://github.com/tseiman/ZabbixWidgets/releases/tag/unifi-network-latest
 
-Archiv und gleichnamige `.sha256`-Datei in ein leeres Download-Verzeichnis laden. Vor dem Entpacken die Prüfsumme verifizieren:
+Place both files in an empty directory and verify the archive before extracting it:
 
 ```bash
 cd ~/Downloads/unifi-topology
@@ -42,9 +38,7 @@ test "$(printf '%s\n' "$archive" | grep -c .)" -eq 1
 sha256sum -c "$archive.sha256"
 ```
 
-Nur bei der Ausgabe `OK` fortfahren. Die Prüfsumme schützt vor einer beschädigten oder unvollständigen Datei; Archiv und Prüfsumme müssen beide von der genannten HTTPS-Release-Seite stammen.
-
-Danach entpacken und mit dem Standardpfad `/usr/share/zabbix/ui/modules` installieren:
+Continue only when `sha256sum` reports `OK`. Then extract and install into the default Zabbix module root:
 
 ```bash
 tar -xzf "$archive"
@@ -52,30 +46,21 @@ package_dir=${archive%.tar.gz}
 sudo "$package_dir/install.sh"
 ```
 
-Der resultierende Pfad ist:
+The resulting manifest is:
 
 ```text
 /usr/share/zabbix/ui/modules/unifi_topology/manifest.json
 ```
 
-Liegt das aktive Zabbix-Frontend an anderer Stelle, wird dessen **übergeordneter Modulordner** als einziger optionaler Parameter übergeben:
+For another verified frontend module root, pass its parent directory:
 
 ```bash
 sudo "$package_dir/install.sh" /opt/zabbix/ui/modules
 ```
 
-Nicht `/opt/zabbix/ui/modules/unifi_topology` übergeben; der Installer ergänzt den Modulnamen selbst. Der Modul-Basisordner muss bereits existieren. Bei einem Systempfad wird `sudo` benötigt.
+Do not pass the existing `unifi_topology` directory itself; the installer appends that name. It stages a complete replacement on the same filesystem, rejects symbolic-link targets, uses directory mode `0755` and file mode `0644`, and rolls back if replacement fails. It never invokes `sudo` itself and does not change credentials or Zabbix configuration.
 
-Der Installer verwendet `install` mit Verzeichnisrechten `0755` und Dateirechten `0644`. Bei einem Update wird zunächst eine vollständige neue Installation im selben Dateisystem aufgebaut, dann der vorhandene Ordner ersetzt. Dadurch verschwinden auch veraltete Dateien des früheren Pakets, insbesondere die alten Markdown-Dateien. Bei einem Fehler vor dem Austausch bleibt das vorhandene Modul bestehen; während des Austauschs wird automatisch zurückgerollt. Ein dauerhaftes Backup wird nicht angelegt.
-
-Vor einem Produktivupdate kann der aktuelle Stand separat gesichert werden:
-
-```bash
-sudo tar -czf /var/backups/unifi_topology-$(date +%Y%m%d-%H%M%S).tar.gz \
-  -C /usr/share/zabbix/ui/modules unifi_topology
-```
-
-Alternativ lässt sich der Installer direkt aus einem geklonten Repository ausführen:
+The installer can also run from a repository checkout:
 
 ```bash
 git clone https://github.com/tseiman/ZabbixWidgets.git
@@ -83,125 +68,91 @@ cd ZabbixWidgets
 sudo ./unifi-network/install.sh
 ```
 
-Bei mehreren Frontend-Instanzen muss das Modul auf jeder Instanz installiert werden. Bei Docker den Modulordner dauerhaft in das `modules`-Verzeichnis des Frontend-Containers einbinden; eine Kopie nur in den laufenden Container überlebt dessen Neuerstellung nicht.
+After installation or update:
 
-Nach Installation oder Update:
+1. Open **Administration → General → Modules → Scan directory** as a Zabbix Super Admin.
+2. Enable **UniFi topology**, or verify the detected version.
+3. Fully reload the dashboard.
+4. For a new widget, select the controller host's **UniFi topology: Raw JSON** item as **Topology master item**.
 
-1. Als Zabbix-Super-Admin **Administration → General → Modules → Scan directory** öffnen.
-2. **UniFi Topologie** aktivieren beziehungsweise die erkannte Version kontrollieren.
-3. Dashboard vollständig neu laden.
-4. Bei der Erstinstallation ein Widget vom Typ **UniFi Topologie** hinzufügen und als **Topologie-Master-Item** das Item **UniFi topology: Raw JSON** des Controller-Hosts auswählen.
+No Zabbix server restart or extra API token is required. If PHP OPcache retains old files, refresh it through the site's normal administrative procedure.
 
-Die Dateien sind für den Webserver lesbar, aber nicht durch ihn beschreibbar. Kein Neustart des Zabbix-Servers und kein zusätzlicher API-Token sind erforderlich. Falls PHP OPcache Änderungen nicht übernimmt, dessen Cache über das normale Administrationsverfahren aktualisieren.
+Version 0.3.0 and later require the supplied template. Import `template/unifi_network_topology_zabbix74.yaml` with **Delete missing** disabled. The template must be linked to the same controller host as the selected topology master item. Low-level discovery creates RX/TX items for `usw` and `uap` devices.
 
-Version 0.3.0 benötigt zusätzlich den Import des im Archiv unter `template/unifi_network_topology_zabbix74.yaml` enthaltenen Templates. Das Template muss auf demselben Controller-Host liegen wie das ausgewählte Topologie-Master-Item. Die LLD erzeugt RX/TX-Items für `usw` und `uap`; erst nach den ersten Werten erscheinen Diagramme.
+## Traffic charts
 
-## Traffic-Diagramme
+Blue shows RX and green shows TX. The template prefers the sum of `rx_bytes-r` and `tx_bytes-r` over every unique physical port and converts byte/s to bit/s. If those values are absent, Zabbix uses the change per second of summed `rx_bytes` and `tx_bytes` counters. Logical LAG, bond, and aggregate interfaces and duplicate port indexes are excluded. For an access point without a usable `port_table`, the physical `uplink` is the fallback source.
 
-Blau zeigt RX, grün TX. Bevorzugt werden `rx_bytes-r` und `tx_bytes-r` jedes eindeutigen physischen Ports summiert und von Byte/s in bit/s umgerechnet. Fehlen diese Werte, verwendet Zabbix die Änderung pro Sekunde der summierten `rx_bytes`- beziehungsweise `tx_bytes`-Zähler. Logische LAG-, Bond- und Aggregate-Interfaces sowie doppelte Portindizes werden nicht zusätzlich gezählt. Bei Access Points ohne nutzbare `port_table` dient der einzelne physische `uplink` als Ausweichquelle.
+**Traffic time period** follows the dashboard time selector by default. The backend retrieves bounded Zabbix history or trend aggregates with at most 320 points per underlying item. An automatically discovered UniFi device without matching history retains an empty chart and reports that no data is available. A manually added topology node receives no traffic chart.
 
-Das Feld **Traffic-Zeitraum** verweist standardmäßig auf den Dashboard-Zeitraum. Das Backend nutzt begrenzte Zabbix-History-/Trend-Aggregate mit maximal 320 Punkten je zugrunde liegendem Item. Manuell ergänzte Geräte und Geräte ohne passende History zeigen ein leeres, eindeutig zugeordnetes Diagramm statt erfundener Messwerte.
+## Mapping topology devices to Zabbix hosts
 
-## Verbindung zwischen Topologiegerät und Zabbix-Host
-
-Damit switch3 seine echten Warnungen bekommt, muss das Gerät eindeutig zum entdeckten Zabbix-Host passen.
-
-Das voreingestellte Namensmuster lautet:
+The default exact-name pattern is:
 
 ```text
 UniFi Network - Site: "Default" - Device: "{name}"
 ```
 
-`{name}` wird exakt durch den Namen aus dem Topologie-JSON ersetzt. Das Widget prüft sowohl den technischen als auch den sichtbaren Zabbix-Hostnamen, ohne unscharfe Teiltreffer. Andere Site-Namen oder eine andere Benennung erfordern ein angepasstes Muster.
+`{name}` is replaced exactly by the topology JSON device name. The widget checks both technical and visible Zabbix host names without fuzzy matching. Adapt the pattern for another site or naming convention.
 
-Oben steht beispielsweise **8/8 Hosts zugeordnet**. Beim Klick auf ein Gerät werden Host-ID und vollständiger Hostname angezeigt. Diese Zuordnung beim ersten Einsatz prüfen.
-
-Falls ein Host nicht gefunden wird oder mehrere Treffer entstehen, bleibt der Knoten grau: **Status unbekannt**. Auch ein Host, der mehreren Topologiegeräten zugeordnet würde, wird nicht automatisch verwendet.
-
-Alternativ im Feld **Optionale Zuordnung** eine Zeile pro Gerät eintragen:
+If no host is found, several hosts match, or one host would map to multiple topology nodes, the node remains gray with an unknown status. Explicit mapping takes precedence. Enter one mapping per line:
 
 ```text
 aa:bb:cc:dd:ee:ff=12345
 ```
 
-Dies ist ein fiktives Syntaxbeispiel; durch die echte MAC-Adresse und die echte Zabbix-Host-ID ersetzen. Die Host-ID lässt sich beispielsweise aus dem `hostid`-Parameter beim Öffnen des Hosts ablesen. Eine explizite Zuordnung hat Vorrang vor dem Namensmuster. Für ausschließlich explizite Zuordnung das Namensmuster leeren. Kommentare beginnen mit `#`.
+Replace the example with the actual UniFi device MAC and numeric Zabbix host ID. Clear the name pattern to use only explicit mappings. Lines beginning with `#` are comments.
 
-Für manuelle Dateiänderungen `mcedit` verwenden; die normale Widget-Konfiguration erfolgt direkt im Zabbix-Dialog.
+## Manual devices and links
 
-## Problemfarben
+Optional manual additions are stored only in the dashboard widget. See `MANUAL_TOPOLOGY.md` for syntax and examples. A manual node can map to a Zabbix host and show its problem state, but it is explicitly marked as not UniFi-managed and never receives a traffic chart icon.
 
-- Die höchste Schwere der offenen Probleme bestimmt den Rahmen des Netzwerkgeräts.
-- Badge und Text zeigen Schweregrad und Anzahl der Probleme.
-- Namen und Farben stammen aus den Zabbix-Einstellungen, einschließlich benutzerdefinierter Farben.
-- Bestätigen allein entfernt die Hervorhebung nicht. Erst wenn das Problem behoben ist, verschwindet es beim nächsten erfolgreichen Widget-Refresh.
-- Unterdrückte Probleme sind standardmäßig ausgeblendet. Die Widget-Option kann sie einschließen.
-- Klick auf die Problemmeldung öffnet das zugehörige Zabbix-Ereignis.
-- Ein grüner Rahmen bedeutet **keine offenen, für den angemeldeten Benutzer sichtbaren Probleme im gewählten Filter**, nicht eine eigenständig gemessene Erreichbarkeit.
-- Host-Monitoring deaktiviert, fehlende/mehrdeutige Zuordnung und veralteter Problemstatus werden grau angezeigt. Vorhandene offene Probleme eines deaktivierten Hosts bleiben sichtbar.
-- Bei Verbindungs- oder API-Fehlern wird der bisherige Status durch eine Fehlermeldung ersetzt, nicht als weiterhin aktuell dargestellt.
+## Problem colors
 
-Der angemeldete Benutzer benötigt Leserechte auf das Topologie-Item und die jeweiligen Geräte-Hosts. Die normalen Zabbix-Berechtigungen gelten auch für Probleme. Es werden keine Zugangsdaten im Browser hinterlegt und keine direkten Datenbankabfragen ausgeführt.
+- The highest severity among visible open problems determines the node border.
+- Severity labels and colors come from Zabbix configuration.
+- Acknowledgement alone does not remove the highlight; resolution does.
+- Suppressed problems are excluded by default and can be included in widget settings.
+- Selecting a problem opens its Zabbix event.
+- Green means the uniquely mapped, monitored host has no open problems visible to the current user under the selected filter. It is not a separate availability check.
+- Missing or ambiguous mappings, disabled monitoring, stale status, and manual nodes without a host are gray.
+- API or frontend errors replace old status rather than presenting it as current.
 
-## Bedienung und Topologie
+The logged-in user needs read permission for the topology item, controller traffic items, and mapped hosts. No credentials are stored in the browser and no direct database query is used.
 
-- Übersicht: Knoten mit `type=DEVICE`; Clients bleiben zunächst ausgeblendet.
-- Klick oder Enter/Leertaste auf ein Gerät: Details und ihm unmittelbar im JSON zugeordnete Endgeräte ein-/ausblenden.
-- Endgeräte hinter einem weiteren Switch erscheinen in dessen Detailbereich.
-- Kabelgebunden: Port und Linkrate, soweit geliefert.
-- WLAN: SSID, Kanal und Experience, soweit geliefert.
-- Verbindung zwischen Netzwerkgeräten: Portnummern in der Übersicht, Linkrate im Tooltip und im Detailbereich.
-- Plus/Minus vergrößern oder verkleinern. Große Ansichten können gescrollt werden.
-- Geräte ohne gelieferte Verbindung bleiben als separate Knoten sichtbar. Das Widget erfindet keine Kabel oder Gateways.
-- Graue Verbindungslinien sind Topologieinformationen, **keine Port-Alarme**. Ein Speicher-Warning färbt das Gerät, nicht seine Leitungen.
-- Die Endgeräteliste zeigt die Topologiedaten. Automatisches Problem-Highlighting ist in dieser Version auf die Netzwerkgeräte der Übersicht konzentriert.
+## Operation and limits
 
-Die Auswahl basiert bewusst auf `type=DEVICE`, nicht auf `unifiDevice`: Das Beispiel enthält auch UniFi-Kameras mit `type=CLIENT`.
+- The overview renders nodes with `type=DEVICE`; clients appear in the selected device's details.
+- Select a node, or press **Enter** or **Space**, to toggle details.
+- Wired clients show port and link rate when available; wireless clients show SSID, channel, and experience.
+- Gray link lines are topology information, not port alarms.
+- Stale data is gray and clearly marked.
+- `has_unknown_switch=true` creates a dismissible warning because intermediate devices may be missing.
+- Limits per response: 1,000 nodes, 3,000 edges, and 2,000 open problems.
+- Manual limits: 50 nodes and 100 links per widget.
 
-## Aktualität und Grenzen
+## Verification checklist
 
-Das Widget aktualisiert sich, solange die Dashboard-Seite aktiv ist. Der aktuelle Problemstatus wird bei jedem Refresh neu gelesen. Die Topologie stammt aus dem letzten gespeicherten Master-Item-Wert. Eine Änderung des Dashboard-Zeitraums stößt eine neue Traffic-Abfrage an.
+1. Expected UniFi switches and access points are visible.
+2. Every automatically discovered UniFi device has one mini chart bound to that device.
+3. Manually added topology nodes have no mini chart.
+4. Selecting each chart opens the matching device's RX/TX dialog.
+5. The dialog follows dashboard time-period changes.
+6. The mapped host shown in details is correct.
+7. Existing Zabbix problems use the configured severity color.
+8. Dismissing an orange warning survives widget refresh but not a full dashboard reload.
 
-Standardmäßig werden Topologiedaten nach 300 Sekunden als veraltet markiert. Bei einem deaktivierten oder nicht unterstützten Quell-Item erscheint ebenfalls ein Hinweis. Datum der Topologie und Zeitpunkt der Problemabfrage stehen unten. Wird der Problemstatus länger als die konfigurierte Altersgrenze nicht aktualisiert, werden die Knoten grau. Ein erneuter erfolgreicher Refresh stellt den aktuellen Zustand wieder her.
+Do not create alarms deliberately; use existing problems and normal resolution for verification.
 
-UniFi `has_unknown_switch=true` wird sichtbar gemeldet. Insbesondere Clients hinter einem unbekannten Switch oder einer Bridge können alle demselben Uplink-Port zugeordnet sein; daraus wird kein direkter physischer Anschluss behauptet. Die Meldung kann mit **×** bis zum vollständigen Neuladen der Dashboard-Seite ausgeblendet werden.
+## Removal
 
-Diese erste Version ist für ein normales Dashboard mit ausgewähltem Controller-Item ausgelegt. Automatische Host-Override-/Template-Dashboard-Vererbung, Port-Trigger-Zuordnung, persistentes freies Verschieben von Knoten und das Aufklappen der Clients direkt als zusätzliche Diagrammknoten sind nicht enthalten. Die Clients erscheinen im Detailbereich.
+Remove the widget from dashboards, disable **UniFi topology** under **Administration → General → Modules**, and only then remove the module directory. Removing the frontend module does not alter templates or collected data.
 
-Grenzen pro Antwort: 1000 Knoten, 3000 Kanten, 2000 offene Probleme. Überschreitungen werden gemeldet, nicht stillschweigend als vollständige Anzeige ausgegeben.
-
-## Teststand
-
-- Template-, LLD- und Port-Summenlogik werden mit automatisierten Regressionstests geprüft, einschließlich doppelter Portindizes, logischer LAG-Interfaces und AP-Uplink-Fallback.
-- JavaScript-Syntax und die PHP-Syntaxstruktur aller Moduldateien wurden automatisiert geprüft.
-- Mini-Diagramme, Skalierung, Overlay, Beschriftungen und Hellmodus wurden mit Firefox in einem datenschutzneutralen Browser-Harness visuell geprüft.
-- Zeitbereich, History-Aggregation und Widget-Feldklassen wurden mit dem offiziellen Zabbix-Quellzweig `release/7.4` abgeglichen.
-- **Es gibt noch keinen Live-Integrationstest gegen die produktive Zabbix-/UniFi-Installation.** Die endgültige Prüfung erfolgt nach Template-Import und Modulaktivierung.
-
-Die separate HTML-Vorschau enthält einen älteren Topologie-Schnappschuss und ein simuliertes switch3-Warning. Sie läuft ohne Verbindung zu Zabbix. Ihre beispielhaften Host-IDs sind keine Konfiguration für dein System. Das installierbare TAR-GZ-Archiv enthält weder diesen Schnappschuss noch Markdown-Dokumentation oder API-Schlüssel.
-
-## Erste Live-Prüfung
-
-1. Erscheinen die erwarteten Netzwerkgeräte?
-2. Zeigt die Kopfzeile die erwartete Anzahl zugeordneter Hosts?
-3. Ist bei switch3 der richtige Zabbix-Host im Detailbereich genannt?
-4. Falls das Speicher-Warning noch offen ist: stimmt die Farbe mit der Zabbix-Problemliste überein?
-5. Öffnet der Problem-Link das richtige Ereignis?
-6. Werden bei einem AP die erwarteten WLAN-Clients angezeigt?
-7. Nach normaler Behebung eines Problems: verschwindet es auch im Widget beim nächsten Refresh?
-8. Haben alle erwarteten Switches und Access Points einen Mini-Graphen?
-9. Folgt der große RX/TX-Dialog nach einer Änderung dem Dashboard-Zeitraum?
-
-Keine Alarme absichtlich auslösen; vorhandene Probleme und ihre normale Behebung verwenden.
-
-## Entfernen
-
-Das Widget aus den Dashboards entfernen und das Modul unter **Administration → General → Modules** deaktivieren. Das beeinflusst die Templates und die Datensammlung nicht. Den Modulordner erst danach bei Bedarf entfernen.
-
-## Technische Referenzen
+## Technical references
 
 - https://www.zabbix.com/documentation/7.4/en/devel/modules/tutorials/widget
 - https://www.zabbix.com/documentation/7.4/en/manual/api/reference/history/get
 - https://www.zabbix.com/documentation/7.4/en/manual/api/reference/problem/get
 - https://github.com/zabbix/zabbix/tree/release/7.4/ui/widgets
 
-Die Quelldateien sind vollständig im Modul enthalten; es gibt keine extern geladenen JavaScript-Bibliotheken, CDNs oder einen separaten Dienst.
+All runtime source files are contained in the module. No external JavaScript library, CDN, or separate service is loaded.
