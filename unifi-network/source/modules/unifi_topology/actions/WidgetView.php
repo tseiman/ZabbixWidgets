@@ -14,7 +14,7 @@ class WidgetView extends CControllerDashboardWidgetView {
         catch (\Throwable $e) {
             $error = $e instanceof \InvalidArgumentException || $e instanceof \RuntimeException
                 ? $e->getMessage()
-                : _('Topology could not be loaded. Check the module version and Zabbix frontend log.');
+                : 'Topologie konnte nicht geladen werden. Modulversion und Zabbix-Frontend-Protokoll pruefen.';
             if (!($e instanceof \InvalidArgumentException) && !($e instanceof \RuntimeException)) {
                 error_log('UniFi Topology: '.get_class($e).': '.$e->getMessage());
             }
@@ -23,7 +23,6 @@ class WidgetView extends CControllerDashboardWidgetView {
             'name' => $this->getInput('name', $this->widget->getName()),
             'topology' => $topology,
             'topology_error' => $error,
-            'locale' => \CWebUser::$data['lang'],
             'user' => ['debug_mode' => $this->getDebugMode()]
         ]));
     }

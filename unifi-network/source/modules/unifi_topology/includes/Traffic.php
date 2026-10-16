@@ -13,7 +13,7 @@ class Traffic {
 
     private static function result($value): array {
         if (!is_array($value)) {
-            throw new RuntimeException(_('Traffic query failed or permission is missing.'));
+            throw new RuntimeException('Traffic-Abfrage fehlgeschlagen oder Berechtigung fehlt.');
         }
 
         return $value;
@@ -21,22 +21,22 @@ class Traffic {
 
     private static function parsePeriod(array $period): array {
         if (!isset($period['from'], $period['to'])) {
-            throw new RuntimeException(_('Dashboard time period for traffic charts is missing.'));
+            throw new RuntimeException('Dashboard-Zeitraum fuer Traffic-Diagramme fehlt.');
         }
 
         $parser = new CRangeTimeParser();
         if ($parser->parse((string) $period['from']) !== CParser::PARSE_SUCCESS) {
-            throw new RuntimeException(_('The start of the dashboard time period is invalid.'));
+            throw new RuntimeException('Start des Dashboard-Zeitraums ist ungueltig.');
         }
         $from = $parser->getDateTime(true)->getTimestamp();
 
         if ($parser->parse((string) $period['to']) !== CParser::PARSE_SUCCESS) {
-            throw new RuntimeException(_('The end of the dashboard time period is invalid.'));
+            throw new RuntimeException('Ende des Dashboard-Zeitraums ist ungueltig.');
         }
         $to = $parser->getDateTime(false)->getTimestamp();
 
         if ($from >= $to) {
-            throw new RuntimeException(_('The dashboard time period for traffic charts is empty.'));
+            throw new RuntimeException('Dashboard-Zeitraum fuer Traffic-Diagramme ist leer.');
         }
 
         return [$from, $to];
@@ -162,7 +162,7 @@ class Traffic {
 
         foreach ($nodes as &$node) {
             $mac = strtolower((string) ($node['mac'] ?? ''));
-            if (empty($node['managed']) || !isset($by_device[$mac])) {
+            if (!isset($by_device[$mac])) {
                 continue;
             }
             $rx = self::choose($by_device[$mac]['rx'] ?? []);

@@ -172,20 +172,13 @@ class WidgetTrafficContractTest(unittest.TestCase):
         self.assertIn("unifi\\.device\\.(rx|tx)\\.(rate|counter)\\.bps", traffic)
         self.assertIn("MAX_POINTS", traffic)
 
-    def test_frontend_binds_svg_mini_charts_only_to_unifi_managed_devices(self):
+    def test_frontend_binds_one_svg_mini_chart_to_each_device(self):
         js = (MODULE / "assets/js/class.widget.js").read_text()
         css = (MODULE / "assets/css/widget.css").read_text()
-        topology = (MODULE / "includes/Topology.php").read_text()
-        manual = (MODULE / "includes/ManualTopology.php").read_text()
-        traffic = (MODULE / "includes/Traffic.php").read_text()
         self.assertIn("this.svg('g'", js)
         self.assertIn("'data-traffic-mac': node.mac", js)
         self.assertIn("this._openTraffic(node, mini)", js)
         self.assertIn("if (traffic) svg.append(traffic)", js)
-        self.assertIn("if (!period || node.managed !== true) return null", js)
-        self.assertIn("'managed' => !empty($vertex['unifiDevice'])", topology)
-        self.assertIn("'managed' => false", manual)
-        self.assertIn("empty($node['managed'])", traffic)
         self.assertNotIn("this.svg('foreignObject'", js)
         self.assertNotIn("button.className = 'ut-traffic-mini'", js)
         self.assertIn("event.key === 'Enter' || event.key === ' '", js)
@@ -204,62 +197,18 @@ class WidgetTrafficContractTest(unittest.TestCase):
         self.assertIn("dialog.showModal()", js)
         self.assertIn("dialog.ut-traffic-dialog", css)
         self.assertIn("::backdrop", css)
-        self.assertEqual(manifest["version"], "0.3.2")
+        self.assertEqual(manifest["version"], "0.3.1")
 
     def test_unknown_switch_warning_is_dismissible_only_for_widget_lifetime(self):
         js = (MODULE / "assets/js/class.widget.js").read_text()
         css = (MODULE / "assets/css/widget.css").read_text()
         self.assertIn("this.dismissedWarnings = new Set()", js)
         self.assertIn("this.dismissedWarnings.add(warning)", js)
-        self.assertIn("t('Close warning')", js)
+        self.assertIn("Warnung schließen", js)
         self.assertIn("ut-notice-close", js)
         self.assertIn(".ut-notice-close", css)
         self.assertNotIn("localStorage", js)
         self.assertNotIn("sessionStorage", js)
-
-    def test_widget_uses_zabbix_translation_api_and_user_locale(self):
-        js = (MODULE / "assets/js/class.widget.js").read_text()
-        widget = (MODULE / "Widget.php").read_text()
-        action = (MODULE / "actions/WidgetView.php").read_text()
-        php = "\n".join(path.read_text() for path in MODULE.rglob("*.php"))
-
-        self.assertIn("getTranslationStrings", widget)
-        self.assertIn("'class.widget.js'", widget)
-        self.assertIn("t('Close')", js)
-        self.assertIn("t('Problems')", js)
-        self.assertIn("t('No data')", js)
-        self.assertIn("CWebUser::$data['lang']", action)
-        self.assertIn("setLocale(response.locale)", js)
-        self.assertIn("toLocaleString(this.locale", js)
-
-        translated_keys = set(re.findall(r"^\s*'([^']+)'\s*=>\s*_\('\1'\)", widget, re.MULTILINE))
-        javascript_keys = set(re.findall(r"\bt\('([^']+)'\)", js))
-        self.assertTrue(javascript_keys)
-        self.assertEqual(javascript_keys - translated_keys, set())
-
-        german_terms = re.compile(
-            r"\b(Keine|Schließen|Warnung|Gerät|Geräte|Verbindung|Verbindungen|Probleme|"
-            r"Topologie|Manuell|Unterdrueckte|ungültig|ungueltig|veraltet|zugeordnet)\b",
-            re.IGNORECASE,
-        )
-        self.assertIsNone(german_terms.search(js))
-        self.assertIsNone(german_terms.search(php))
-
-    def test_all_unifi_readmes_are_english_and_document_managed_only_charts(self):
-        readmes = list((ROOT / "unifi-network").rglob("README*.md"))
-        self.assertGreaterEqual(len(readmes), 3)
-        german_terms = re.compile(
-            r"\b(Das|Die|Keine|Schließen|Warnung|Gerät|Geräte|Verbindung|Verbindungen|"
-            r"Probleme|Topologie|Manuell|Unterdrueckte|veraltet|zugeordnet)\b"
-        )
-        for readme in readmes:
-            content = readme.read_text()
-            self.assertIsNone(german_terms.search(content), readme)
-
-        current = (ROOT / "unifi-network/README.md").read_text()
-        self.assertIn("Version 0.3.2", current)
-        self.assertIn("non-UniFi-managed devices do not receive a traffic icon", current)
-        self.assertIn("Widget::getTranslationStrings()", current)
 
 
 if __name__ == "__main__":

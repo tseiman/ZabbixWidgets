@@ -1,40 +1,40 @@
-# UniFi Network Topology — Zabbix 7.4
+# UniFi Network Topology – Zabbix 7.4
 
-> Historical document translated to English. It describes the original standalone topology template. Use `unifi-network/README.md` for the current release.
+Eigenständiges Template in der eigenen Gruppe „Templates/UniFi Topology“. Das Community-Template wird nicht verknüpft oder geändert. Es werden ausschließlich GET-Abfragen an UniFi ausgeführt.
 
-This was a standalone template in its own `Templates/UniFi Topology` group. It did not link or modify the community template. It performed only `GET` requests to UniFi.
+## Verwendung
 
-## Usage
+1. Unter Data collection → Templates → Import die Datei unifi_network_topology_zabbix74.yaml wählen. Beim ersten Import „Create new“ für Template und Template-Gruppe aktivieren. „Delete missing“ deaktiviert lassen. Die Importvorschau soll nur das neue Template mit fünf Items und seine Gruppe zeigen.
+2. Unter Data collection → Hosts den ursprünglichen Controller-Host (z. B. unifi.tsei.mdn) öffnen. Zusätzlich zum bestehenden UniFi Network API Template das Template „UniFi Network Topology“ verknüpfen. Nicht an jeden entdeckten Geräte-Host hängen.
+3. Am Controller-Host die vorhandenen Makros prüfen:
+   - {$UNIFI_NETWORK_API_ADDRESS}: nur Hostname oder IP, optional :Port; ohne https:// und ohne Pfad, z. B. unifi.tsei.mdn.
+   - {$UNIFI_NETWORK_API_KEY}: vorhandener API-Key, vorzugsweise als Secret text.
+   Das neue Template definiert keine Makro-Standardwerte. Falls die Werte bisher nur aus dem Community-Template geerbt werden, ihre wirksamen Werte unter „Inherited and host macros“ prüfen.
+4. Beim Item „UniFi topology: Raw JSON“ Execute now wählen. Anschließend unter Monitoring → Latest data nach „UniFi topology“ filtern.
 
-1. Open **Data collection → Templates → Import** and select `unifi_network_topology_zabbix74.yaml`. On the first import, enable creation of the template and template group. Keep **Delete missing** disabled. The original import preview was expected to show only the new template, five items, and its group.
-2. Open the existing controller host under **Data collection → Hosts**. Link **UniFi Network Topology** in addition to the existing UniFi Network API template. Do not link it to every discovered device host.
-3. Check the effective host macros:
-   - `{$UNIFI_NETWORK_API_ADDRESS}` — host name or IP address, optionally followed by a port, without `https://` or a path.
-   - `{$UNIFI_NETWORK_API_KEY}` — existing API key, preferably stored as a secret macro.
-   The topology template defined no macro defaults. If values were inherited only from the community template, their effective values had to be checked under **Inherited and host macros**.
-4. Run **Execute now** for `UniFi topology: Raw JSON`, then filter **Monitoring → Latest data** for `UniFi topology`.
+## Enthaltene Items
 
-## Original items
+| Key | Inhalt |
+| --- | --- |
+| unifi.topology.json | HTTP-Agent-Master, vollständiger JSON-Body, GET alle 1 Minute, HTTP 200 erforderlich |
+| unifi.topology.vertices | Text/JSON, JSONPath $.vertices |
+| unifi.topology.edges | Text/JSON, JSONPath $.edges |
+| unifi.topology.vertices.count | Unsigned, JSONPath $.vertices.length() |
+| unifi.topology.edges.count | Unsigned, JSONPath $.edges.length() |
 
-- `unifi.topology.json` — HTTP-agent master item, complete JSON response, `GET` every minute, HTTP 200 required.
-- `unifi.topology.vertices` — dependent text/JSON item using JSONPath `$.vertices`.
-- `unifi.topology.edges` — dependent text/JSON item using JSONPath `$.edges`.
-- `unifi.topology.vertices.count` — unsigned dependent item using `$.vertices.length()`.
-- `unifi.topology.edges.count` — unsigned dependent item using `$.edges.length()`.
+Die vier abhängigen Items verursachen keine zusätzlichen HTTP-Aufrufe. Textwerte werden 1 Tag aufbewahrt, Counts 30 Tage mit Trends für 365 Tage; globale Housekeeping-Regeln können dies überschreiben. Counts zählen alle gelieferten Einträge, nicht ausschließlich Infrastrukturgeräte oder physische Kabel. Es gibt keine erfundenen Online-/Health-Werte oder Alarmgrenzen.
 
-The four dependent items generated no additional HTTP requests. Text values were retained for one day; counts for 30 days with trends for 365 days. Global housekeeping could override those periods. Counts represented every returned entry, not only infrastructure devices or physical cables. The template did not invent online, health, or threshold values.
+## Betrieb und Grenzen
 
-## Operation and limits
+- Site ist fest „default“, wie im geprüften Beispiel.
+- Der zuständige Zabbix-Server beziehungsweise Proxy benötigt DNS-/HTTPS-Zugriff auf den Controller; ein Agent-Interface ist nicht erforderlich.
+- TLS-Zertifikat und Hostname werden geprüft. Bei einer privaten CA muss diese auf dem zuständigen Zabbix-Server/Proxy vertrauenswürdig sein. Der frühere Test mit curl -k belegt keine gültige Zertifikatsprüfung.
+- Redirects sind deaktiviert. Fehler wie HTTP 401/403, TLS-Fehler oder abweichende JSON-Struktur unter Items prüfen. Fehlende Felder werden nicht künstlich zu 0; bei einem Abfragefehler bleiben die letzten Werte stehen, daher auch deren Zeitstempel beachten.
+- Falls die vorgeschlagenen Items aus dem früheren Gespräch bereits manuell angelegt wurden, kollidieren identische Keys beim Verknüpfen. Vorher diese manuellen Items prüfen und gegebenenfalls umbenennen; das bestehende Community-Template dabei unverändert lassen.
+- Der interne UniFi-Endpunkt kann sich bei Updates ändern. Dieses Template sammelt die Grundlage für eine spätere Netzkarte; es erzeugt noch keine Zabbix Map.
 
-- The site was fixed to `default`, matching the verified sample.
-- The responsible Zabbix server or proxy required DNS and HTTPS access to the controller; no agent interface was required.
-- TLS certificate and host name verification were enabled. A private CA had to be trusted on the responsible server or proxy. A successful `curl -k` test did not prove valid certificate verification.
-- Redirects were disabled. HTTP 401/403, TLS failures, or changed JSON structure had to be diagnosed on the items. Missing fields were not converted artificially to zero. Zabbix retained old values after a collection failure, so timestamps also had to be checked.
-- Manually created items with the same keys could conflict when linking the template. Such items had to be reviewed or renamed without changing the community template.
-- The internal UniFi endpoint could change after controller updates. The template collected data for a topology display; it did not create a classic Zabbix map.
+## Prüfung
 
-## Historical verification
+YAML wurde eingelesen und auf eindeutige UUIDs/Keys sowie die Master-Verweise geprüft. Die beigefügte originale Topologie-Antwort wurde auf die beiden Arrays geprüft. Ein tatsächlicher Import in einen laufenden Zabbix-7.4-Server wurde hier nicht durchgeführt.
 
-The YAML was parsed and checked for unique UUIDs and keys and correct master-item references. The supplied original topology response was checked for both arrays. No import into a running Zabbix 7.4 server had been performed at that historical stage.
-
-Format reference: https://www.zabbix.com/documentation/7.4/en/manual/xml_export_import/templates
+Formatreferenz: https://www.zabbix.com/documentation/7.4/en/manual/xml_export_import/templates

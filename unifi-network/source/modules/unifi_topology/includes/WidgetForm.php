@@ -12,9 +12,9 @@ use Zabbix\Widgets\Fields\CWidgetFieldTimePeriod;
 class WidgetForm extends CWidgetForm {
     public function addFields(): self {
         return $this
-            ->addField((new CWidgetFieldMultiSelectItem('itemid', _('Topology master item')))->setMultiple(false)->setFlags(CWidgetField::FLAG_NOT_EMPTY | CWidgetField::FLAG_LABEL_ASTERISK))
+            ->addField((new CWidgetFieldMultiSelectItem('itemid', _('Topologie-Master-Item')))->setMultiple(false)->setFlags(CWidgetField::FLAG_NOT_EMPTY | CWidgetField::FLAG_LABEL_ASTERISK))
             ->addField(
-                (new CWidgetFieldTimePeriod('time_period', _('Traffic time period')))
+                (new CWidgetFieldTimePeriod('time_period', _('Traffic-Zeitraum')))
                     ->setDefault([
                         CWidgetField::FOREIGN_REFERENCE_KEY => CWidgetField::createTypedReference(
                             CWidgetField::REFERENCE_DASHBOARD, \CWidgetsData::DATA_TYPE_TIME_PERIOD
@@ -23,12 +23,12 @@ class WidgetForm extends CWidgetForm {
                     ->setDefaultPeriod(['from' => 'now-1h', 'to' => 'now'])
                     ->setFlags(CWidgetField::FLAG_NOT_EMPTY | CWidgetField::FLAG_LABEL_ASTERISK)
             )
-            ->addField((new CWidgetFieldTextBox('host_pattern', _('Exact Zabbix host name containing {name}')))->setDefault('UniFi Network - Site: "Default" - Device: "{name}"'))
-            ->addField(new CWidgetFieldTextArea('bindings', _('Optional mapping: MAC=host ID, one per line')))
-            ->addField(new CWidgetFieldTextArea('manual_nodes', _('Additional devices: ID | name | optional host ID')))
-            ->addField(new CWidgetFieldTextArea('manual_links', _('Additional links: from | to | label')))
-            ->addField((new CWidgetFieldIntegerBox('max_age', _('Maximum topology data age (seconds)'), 60, 86400))->setDefault(300))
-            ->addField((new CWidgetFieldCheckBox('show_suppressed', _('Include suppressed problems')))->setDefault(0));
+            ->addField((new CWidgetFieldTextBox('host_pattern', _('Exakter Zabbix-Hostname mit {name}')))->setDefault('UniFi Network - Site: "Default" - Device: "{name}"'))
+            ->addField(new CWidgetFieldTextArea('bindings', _('Optionale Zuordnung: MAC=Host-ID, eine je Zeile')))
+            ->addField(new CWidgetFieldTextArea('manual_nodes', _('Zusätzliche Geräte: id | Name | optionale Host-ID')))
+            ->addField(new CWidgetFieldTextArea('manual_links', _('Zusätzliche Verbindungen: von | nach | Beschriftung')))
+            ->addField((new CWidgetFieldIntegerBox('max_age', _('Topologiedaten maximal alt (Sekunden)'), 60, 86400))->setDefault(300))
+            ->addField((new CWidgetFieldCheckBox('show_suppressed', _('Unterdrueckte Probleme einbeziehen')))->setDefault(0));
     }
     public function validate(bool $strict = false): array {
         $errors = parent::validate($strict);
@@ -37,7 +37,7 @@ class WidgetForm extends CWidgetForm {
             Topology::parseBindings($this->getFieldValue('bindings') ?? '');
             $pattern = $this->getFieldValue('host_pattern') ?? '';
             if ($pattern !== '' && substr_count($pattern, '{name}') !== 1) {
-                $errors[] = _('The name pattern must contain {name} exactly once or be empty.');
+                $errors[] = 'Das Namensmuster muss genau einmal {name} enthalten oder leer sein.';
             }
         }
         catch (\InvalidArgumentException $e) {
