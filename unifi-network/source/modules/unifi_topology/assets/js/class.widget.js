@@ -245,6 +245,7 @@ class UniFiTopologyView {
         if (preserve && dialog) dialog.dataset.preserve = '1';
         else if (this.widget) this.widget._utTrafficOpenMac = null;
         if (dialog?.isConnected) {
+            dialog._utBackdrop?.remove();
             if (dialog.open) dialog.close();
             dialog.remove();
         }
@@ -256,6 +257,8 @@ class UniFiTopologyView {
 
         const dialog = document.createElement('dialog');
         dialog.className = 'ut-traffic-dialog';
+        const backdrop = this.el('div', null, 'ut-traffic-backdrop');
+        dialog._utBackdrop = backdrop;
         dialog.setAttribute('aria-labelledby', 'ut-traffic-title-' + node.mac.replaceAll(':', ''));
         const header = this.el('div', null, 'ut-traffic-dialog-header');
         const heading = this.el('div');
@@ -297,18 +300,25 @@ class UniFiTopologyView {
                     this.widget._utTrafficOpenMac = null;
                 }
             }
+            backdrop.remove();
             dialog.remove();
             if (wasCurrent && dialog.dataset.preserve !== '1' && activator?.isConnected) activator.focus();
         }, { once: true });
-        dialog.addEventListener('click', event => {
-            if (event.target === dialog) {
-                const box = dialog.getBoundingClientRect();
-                if (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom) dialog.close();
+        backdrop.addEventListener('click', () => dialog.close());
+        dialog.addEventListener('keydown', event => {
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                dialog.close();
             }
         });
         this.trafficDialog = dialog;
+        document.body.append(backdrop);
         document.body.append(dialog);
-        dialog.showModal();
+        // A modal <dialog> enters the browser top layer, while Zabbix appends
+        // native graph hint boxes to .wrapper. Use an explicit backdrop and a
+        // non-modal dialog below Zabbix's z-index 1000 overlay layer so cursor
+        // hints remain visible and interactive above the traffic graph.
+        dialog.show();
         close.focus();
         this.widget?._loadTrafficGraph(node, graphSurface, dialog);
     }

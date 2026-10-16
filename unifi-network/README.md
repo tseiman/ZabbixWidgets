@@ -2,7 +2,7 @@
 
 A read-only Zabbix 7.4 dashboard widget that visualizes a UniFi Network topology, links network devices to Zabbix hosts, overlays the current Zabbix problem severity, and shows per-device RX/TX traffic history. The accompanying template collects both topology and per-port device statistics from the UniFi controller.
 
-This directory contains **UniFi Network Topology 0.3.6** and its **Zabbix 7.4** template. Version 0.3.6 fixes delivery of the native graph context from the PHP widget view to the browser. Version 0.3.5 introduced the expanded RX/TX dialog using Zabbix's native modern SVG Graph component and dashboard-wide time selection. Version 0.3.4 added module-local English and German frontend translations selected from the logged-in Zabbix user's language. German variants (`de`, `de_DE`, and `de-DE`) use German; English and unsupported languages use the English source fallback. Manually added nodes still have no traffic icon, while every automatically discovered UniFi device retains its mini chart.
+This directory contains **UniFi Network Topology 0.3.7** and its **Zabbix 7.4** template. Version 0.3.7 keeps the native graph cursor-value hint above the expanded traffic dialog. Version 0.3.6 fixed delivery of the native graph context from the PHP widget view to the browser. Version 0.3.5 introduced the expanded RX/TX dialog using Zabbix's native modern SVG Graph component and dashboard-wide time selection. Version 0.3.4 added module-local English and German frontend translations selected from the logged-in Zabbix user's language. German variants (`de`, `de_DE`, and `de-DE`) use German; English and unsupported languages use the English source fallback. Manually added nodes still have no traffic icon, while every automatically discovered UniFi device retains its mini chart.
 
 ## Contents
 
@@ -75,7 +75,7 @@ unifi-network/
 ├── tests/                                        # Regression and package-installation tests
 └── source/
     ├── docs/original/                            # Supplied historical Markdown documents
-    ├── modules/unifi_topology/                   # Widget source 0.3.6
+    ├── modules/unifi_topology/                   # Widget source 0.3.7
     │   ├── actions/
     │   ├── assets/
     │   ├── includes/
