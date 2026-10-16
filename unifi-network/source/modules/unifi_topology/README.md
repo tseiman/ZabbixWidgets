@@ -14,23 +14,81 @@ Das Widget liest das Text-Item „UniFi topology: Raw JSON“ und zeichnet die N
 
 Die in 0.2.0 eingeführten optionalen manuellen Geräte und Verbindungen bleiben unverändert verfügbar. Syntax und Beispiele stehen in `MANUAL_TOPOLOGY.md`.
 
-## Installation
+## Installation und Update
 
-Das ZIP enthält genau den Ordner `unifi_topology`. Dieser gehört in das vorhandene Verzeichnis `modules` des **Zabbix-Webfrontends**. Bei mehreren Frontend-Instanzen muss er auf jeder Instanz verfügbar sein.
+Das installierbare Archiv wird bei jeder Änderung unter `unifi-network/` automatisch neu gebaut. Es enthält:
 
-1. ZIP auf den Rechner mit dem Zabbix-Webfrontend übertragen und entpacken.
-2. Den Ordner `unifi_topology` in dessen `modules`-Verzeichnis kopieren. Direkt darunter muss `unifi_topology/manifest.json` liegen, keine zusätzliche verschachtelte Ordnerstufe.
-3. Als Zabbix-Super-Admin **Administration → General → Modules → Scan directory** öffnen.
-4. **UniFi Topologie** aktivieren.
-5. Dashboard neu laden, bearbeiten und ein Widget vom Typ **UniFi Topologie** hinzufügen.
-6. Als **Topologie-Master-Item** auf dem Controller-Host das Item **UniFi topology: Raw JSON** auswählen.
-7. Aktualisierungsintervall auf **1 Minute** einstellen und Dashboard speichern.
+- `install.sh` – Installer für Neuinstallation und Update,
+- `module/` – ausschließlich die benötigten Laufzeitdateien des Widgets,
+- `template/unifi_network_topology_zabbix74.yaml` – separat in Zabbix zu importierendes Template.
 
-Ein typischer Frontend-Pfad ist `/usr/share/zabbix` oder `/usr/share/zabbix/ui`; je nach Paket und Installation kann er anders heißen. Es muss der Ordner des tatsächlich ausgelieferten Webfrontends sein. Bei Docker den Modulordner dauerhaft in das `modules`-Verzeichnis des Frontend-Containers einbinden; eine Kopie nur in den laufenden Container überlebt dessen Neuerstellung nicht.
+`README*.md` und andere Markdown-Dateien sind weder im Archiv noch im installierten Modul enthalten. Die aktuelle Version steht auf der GitHub-Release-Seite:
 
-Die Dateien müssen für den Webserver lesbar sein (typisch Dateien 0644, Ordner 0755), aber nicht durch ihn beschreibbar. Kein Neustart des Zabbix-Servers und kein zusätzlicher API-Token sind erforderlich. Falls PHP OPcache Änderungen nicht übernimmt, dessen Cache über das normale Administrationsverfahren aktualisieren.
+https://github.com/tseiman/ZabbixWidgets/releases/tag/unifi-network-latest
 
-Version 0.3.0 benötigt zusätzlich den Import von `source/templates/unifi_network_topology_zabbix74.yaml`. Das Template muss auf demselben Controller-Host liegen wie das ausgewählte Topologie-Master-Item. Die LLD erzeugt RX/TX-Items für `usw` und `uap`; erst nach den ersten Werten erscheinen Diagramme.
+Archiv und gleichnamige `.sha256`-Datei in ein leeres Download-Verzeichnis laden. Vor dem Entpacken die Prüfsumme verifizieren:
+
+```bash
+cd ~/Downloads/unifi-topology
+archive=$(find . -maxdepth 1 -type f -name 'unifi_topology-*.tar.gz' -print)
+test -n "$archive"
+test "$(printf '%s\n' "$archive" | grep -c .)" -eq 1
+sha256sum -c "$archive.sha256"
+```
+
+Nur bei der Ausgabe `OK` fortfahren. Die Prüfsumme schützt vor einer beschädigten oder unvollständigen Datei; Archiv und Prüfsumme müssen beide von der genannten HTTPS-Release-Seite stammen.
+
+Danach entpacken und mit dem Standardpfad `/usr/share/zabbix/ui/modules` installieren:
+
+```bash
+tar -xzf "$archive"
+package_dir=${archive%.tar.gz}
+sudo "$package_dir/install.sh"
+```
+
+Der resultierende Pfad ist:
+
+```text
+/usr/share/zabbix/ui/modules/unifi_topology/manifest.json
+```
+
+Liegt das aktive Zabbix-Frontend an anderer Stelle, wird dessen **übergeordneter Modulordner** als einziger optionaler Parameter übergeben:
+
+```bash
+sudo "$package_dir/install.sh" /opt/zabbix/ui/modules
+```
+
+Nicht `/opt/zabbix/ui/modules/unifi_topology` übergeben; der Installer ergänzt den Modulnamen selbst. Der Modul-Basisordner muss bereits existieren. Bei einem Systempfad wird `sudo` benötigt.
+
+Der Installer verwendet `install` mit Verzeichnisrechten `0755` und Dateirechten `0644`. Bei einem Update wird zunächst eine vollständige neue Installation im selben Dateisystem aufgebaut, dann der vorhandene Ordner ersetzt. Dadurch verschwinden auch veraltete Dateien des früheren Pakets, insbesondere die alten Markdown-Dateien. Bei einem Fehler vor dem Austausch bleibt das vorhandene Modul bestehen; während des Austauschs wird automatisch zurückgerollt. Ein dauerhaftes Backup wird nicht angelegt.
+
+Vor einem Produktivupdate kann der aktuelle Stand separat gesichert werden:
+
+```bash
+sudo tar -czf /var/backups/unifi_topology-$(date +%Y%m%d-%H%M%S).tar.gz \
+  -C /usr/share/zabbix/ui/modules unifi_topology
+```
+
+Alternativ lässt sich der Installer direkt aus einem geklonten Repository ausführen:
+
+```bash
+git clone https://github.com/tseiman/ZabbixWidgets.git
+cd ZabbixWidgets
+sudo ./unifi-network/install.sh
+```
+
+Bei mehreren Frontend-Instanzen muss das Modul auf jeder Instanz installiert werden. Bei Docker den Modulordner dauerhaft in das `modules`-Verzeichnis des Frontend-Containers einbinden; eine Kopie nur in den laufenden Container überlebt dessen Neuerstellung nicht.
+
+Nach Installation oder Update:
+
+1. Als Zabbix-Super-Admin **Administration → General → Modules → Scan directory** öffnen.
+2. **UniFi Topologie** aktivieren beziehungsweise die erkannte Version kontrollieren.
+3. Dashboard vollständig neu laden.
+4. Bei der Erstinstallation ein Widget vom Typ **UniFi Topologie** hinzufügen und als **Topologie-Master-Item** das Item **UniFi topology: Raw JSON** des Controller-Hosts auswählen.
+
+Die Dateien sind für den Webserver lesbar, aber nicht durch ihn beschreibbar. Kein Neustart des Zabbix-Servers und kein zusätzlicher API-Token sind erforderlich. Falls PHP OPcache Änderungen nicht übernimmt, dessen Cache über das normale Administrationsverfahren aktualisieren.
+
+Version 0.3.0 benötigt zusätzlich den Import des im Archiv unter `template/unifi_network_topology_zabbix74.yaml` enthaltenen Templates. Das Template muss auf demselben Controller-Host liegen wie das ausgewählte Topologie-Master-Item. Die LLD erzeugt RX/TX-Items für `usw` und `uap`; erst nach den ersten Werten erscheinen Diagramme.
 
 ## Traffic-Diagramme
 
@@ -113,7 +171,7 @@ Grenzen pro Antwort: 1000 Knoten, 3000 Kanten, 2000 offene Probleme. Überschrei
 - Zeitbereich, History-Aggregation und Widget-Feldklassen wurden mit dem offiziellen Zabbix-Quellzweig `release/7.4` abgeglichen.
 - **Es gibt noch keinen Live-Integrationstest gegen die produktive Zabbix-/UniFi-Installation.** Die endgültige Prüfung erfolgt nach Template-Import und Modulaktivierung.
 
-Die separate HTML-Vorschau enthält einen älteren Topologie-Schnappschuss und ein simuliertes switch3-Warning. Sie läuft ohne Verbindung zu Zabbix. Ihre beispielhaften Host-IDs sind keine Konfiguration für dein System. Das installierbare ZIP enthält weder diesen Schnappschuss noch API-Schlüssel.
+Die separate HTML-Vorschau enthält einen älteren Topologie-Schnappschuss und ein simuliertes switch3-Warning. Sie läuft ohne Verbindung zu Zabbix. Ihre beispielhaften Host-IDs sind keine Konfiguration für dein System. Das installierbare TAR-GZ-Archiv enthält weder diesen Schnappschuss noch Markdown-Dokumentation oder API-Schlüssel.
 
 ## Erste Live-Prüfung
 

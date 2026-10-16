@@ -1,0 +1,108 @@
+name: Build UniFi topology installation archive
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "unifi-network/**"
+      - ".github/workflows/unifi-network-package.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: unifi-network-package
+  cancel-in-progress: true
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build archive and checksum
+        id: build
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          short_sha=${GITHUB_SHA::7}
+          unifi-network/scripts/build-install-archive.sh unifi-network/dist "$short_sha"
+          archive=$(find unifi-network/dist -maxdepth 1 -type f -name '*.tar.gz' -print -quit)
+          test -n "$archive"
+          printf 'archive=%s\n' "$archive" >> "$GITHUB_OUTPUT"
+          printf 'checksum=%s.sha256\n' "$archive" >> "$GITHUB_OUTPUT"
+
+      - name: Run module regression tests
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest -v unifi-network/tests/test_unifi_network.py
+          node --check unifi-network/source/modules/unifi_topology/assets/js/class.widget.js
+
+      - name: Verify archive and installer
+        shell: bash
+        run: unifi-network/tests/test_install_package.sh
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: unifi-topology-${{ github.sha }}
+          path: |
+            ${{ steps.build.outputs.archive }}
+            ${{ steps.build.outputs.checksum }}
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish rolling GitHub release
+        if: github.ref == 'refs/heads/main'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARCHIVE: ${{ steps.build.outputs.archive }}
+          CHECKSUM: ${{ steps.build.outputs.checksum }}
+        run: |
+          set -Eeuo pipefail
+          release_tag=unifi-network-latest
+          archive_name=$(basename -- "$ARCHIVE")
+          checksum_name=$(basename -- "$CHECKSUM")
+
+          git tag --force "$release_tag" "$GITHUB_SHA"
+          git push --force origin "refs/tags/$release_tag"
+
+          cat > "$RUNNER_TEMP/unifi-release-notes.md" <<EOF
+          Automatically built from commit \`$GITHUB_SHA\`.
+
+          Download \`$archive_name\` and \`$checksum_name\`, verify the checksum, extract the archive, then run \`sudo ./unifi_topology-*/install.sh\`.
+
+          The installer defaults to \`/usr/share/zabbix/ui/modules\`. Pass another Zabbix frontend module directory as its only argument when required.
+          EOF
+
+          if gh release view "$release_tag" >/dev/null 2>&1; then
+            gh release edit "$release_tag" \
+              --title "UniFi Topologie – latest installation package" \
+              --notes-file "$RUNNER_TEMP/unifi-release-notes.md" \
+              --prerelease \
+              --latest=false
+          else
+            gh release create "$release_tag" \
+              --title "UniFi Topologie – latest installation package" \
+              --notes-file "$RUNNER_TEMP/unifi-release-notes.md" \
+              --prerelease \
+              --latest=false
+          fi
+
+          gh release upload "$release_tag" "$ARCHIVE" "$CHECKSUM" --clobber
+
+          while IFS= read -r old_asset; do
+            case "$old_asset" in
+              "$archive_name"|"$checksum_name") ;;
+              unifi_topology-*.tar.gz|unifi_topology-*.tar.gz.sha256)
+                gh release delete-asset "$release_tag" "$old_asset" --yes
+                ;;
+            esac
+          done < <(gh release view "$release_tag" --json assets --jq '.assets[].name')

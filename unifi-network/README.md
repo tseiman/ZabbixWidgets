@@ -65,13 +65,17 @@ The supplied template uses the UniFi site name `default` in both request URLs. F
 ## Repository layout
 
 ```text
+.github/workflows/unifi-network-package.yml       # Builds and publishes the rolling package
 unifi-network/
+├── .gitignore
 ├── README.md
-├── assets/                                  # README screenshots
-├── tests/                                   # Template and widget regression tests
+├── install.sh                                    # Installs from a checkout or extracted package
+├── scripts/build-install-archive.sh              # Creates TAR.GZ plus SHA-256 sidecar
+├── assets/                                       # README screenshots
+├── tests/                                        # Regression and package-installation tests
 └── source/
-    ├── docs/original/                     # Supplied external Markdown documents
-    ├── modules/unifi_topology/            # Installable widget 0.3.0
+    ├── docs/original/                            # Supplied historical Markdown documents
+    ├── modules/unifi_topology/                   # Widget source 0.3.0
     │   ├── actions/
     │   ├── assets/
     │   ├── includes/
@@ -91,17 +95,22 @@ The files below `source/docs/original/` document older imported releases and are
 
 ## Install the topology template
 
-Clone the repository and work from its root:
+Obtain the template either from the installation archive described in [Install the frontend module](#install-the-frontend-module), or clone the repository:
 
 ```bash
 git clone https://github.com/tseiman/ZabbixWidgets.git
 cd ZabbixWidgets
 ```
 
+The template path is:
+
+- extracted archive: `unifi_topology-*/template/unifi_network_topology_zabbix74.yaml`
+- repository checkout: `unifi-network/source/templates/unifi_network_topology_zabbix74.yaml`
+
 In Zabbix:
 
 1. Open **Data collection → Templates → Import**.
-2. Import `unifi-network/source/templates/unifi_network_topology_zabbix74.yaml`.
+2. Import the template from the applicable path above.
 3. On the first import, allow creation of the template and the `Templates/UniFi Topology` template group.
 4. Keep **Delete missing** disabled.
 5. Review the import preview. It should contain six regular items, one discovery rule, and six item prototypes.
@@ -127,38 +136,55 @@ The dependent items do not cause additional controller requests. The template ma
 
 ## Install the frontend module
 
-First identify the actual Zabbix frontend module directory. For packaged Zabbix 7.4 installations it is commonly `/usr/share/zabbix/ui/modules`:
+The recommended installation artifact is published on the rolling [UniFi Network release page](https://github.com/tseiman/ZabbixWidgets/releases/tag/unifi-network-latest). Every push that changes `unifi-network/` rebuilds the package. The release retains only the newest versioned archive and its SHA-256 sidecar.
+
+Download both files into an otherwise empty directory. Verify the archive before extracting it:
 
 ```bash
-ls -ld /usr/share/zabbix/ui/modules /usr/share/zabbix/modules 2>/dev/null
+cd ~/Downloads/unifi-topology
+archive=$(find . -maxdepth 1 -type f -name 'unifi_topology-*.tar.gz' -print)
+test -n "$archive"
+test "$(printf '%s\n' "$archive" | grep -c .)" -eq 1
+sha256sum -c "$archive.sha256"
 ```
 
-Use only the path belonging to the frontend actually served by the webserver. Do not copy the module blindly to both locations.
-
-For a confirmed `/usr/share/zabbix/ui/modules` installation, ensure that no previous module directory exists and copy the module:
+Continue only when `sha256sum` reports `OK`. The checksum proves integrity relative to the downloaded sidecar; obtain both files from the intended HTTPS release and confirm the release tag. Extraction is deliberately a separate command:
 
 ```bash
-test -d /usr/share/zabbix/ui/modules
-test ! -e /usr/share/zabbix/ui/modules/unifi_topology
-sudo cp -a unifi-network/source/modules/unifi_topology /usr/share/zabbix/ui/modules/
-sudo chown -R root:root /usr/share/zabbix/ui/modules/unifi_topology
+tar -xzf "$archive"
+package_dir=${archive%.tar.gz}
+sudo "$package_dir/install.sh"
 ```
 
-The resulting path must be:
+The default module root is `/usr/share/zabbix/ui/modules`, producing:
 
 ```text
 /usr/share/zabbix/ui/modules/unifi_topology/manifest.json
 ```
 
-The webserver must be able to read the module, but should not be able to modify it. The supplied files and directories use conventional read-only module permissions.
+To use another confirmed Zabbix frontend module root, pass that parent directory as the only argument:
 
-For multiple frontend instances, install the same module on every instance. In containers, place it in a persistent frontend volume; a copy made only inside a running container will disappear when that container is recreated.
+```bash
+sudo "$package_dir/install.sh" /opt/zabbix/ui/modules
+```
+
+Do not pass the existing `unifi_topology` directory itself. The installer appends that name, rejects symbolic-link targets, stages a complete replacement on the same filesystem, and rolls back if the replacement cannot be completed. It uses directory mode `0755` and file mode `0644`. Markdown documentation is not packaged or installed, so an update also removes documentation left by the old standalone package. No persistent backup is created automatically.
+
+The same installer can be run directly from a repository checkout:
+
+```bash
+git clone https://github.com/tseiman/ZabbixWidgets.git
+cd ZabbixWidgets
+sudo ./unifi-network/install.sh
+```
+
+For multiple frontend instances, install the same module on every instance. In containers, install it into a persistent frontend volume; a copy made only inside a running container disappears when the container is recreated.
 
 In Zabbix:
 
 1. Open **Administration → General → Modules** as a Super Admin.
 2. Select **Scan directory**.
-3. Enable **UniFi Topologie**.
+3. Enable **UniFi Topologie**, or verify the detected version after an update.
 4. Fully reload the dashboard page.
 
 No Zabbix server restart and no additional API token are required. If an enabled PHP OPcache retains old files, refresh it using the site's normal administrative procedure.
@@ -285,7 +311,9 @@ Gray connection lines represent topology only. They are not port alarms. Device 
 
 ## Updates
 
-Start from a clean repository and retrieve the latest version:
+For an archive-based installation, download the current archive and checksum from the rolling release into a new empty directory, repeat the checksum gate, extract it, and run its installer. The installer replaces only the `unifi_topology` module directory and removes stale files from the former package.
+
+For a repository checkout, start with a clean worktree and update it:
 
 ```bash
 cd ZabbixWidgets
@@ -293,21 +321,20 @@ git status --short
 git pull --ff-only
 ```
 
-Back up the installed module before replacing it:
+Before a production update, retain an operator-controlled backup:
 
 ```bash
-sudo tar -czf /var/backups/unifi_topology-$(date +%Y%m%d-%H%M%S).tar.gz -C /usr/share/zabbix/ui/modules unifi_topology
+sudo tar -czf /var/backups/unifi_topology-$(date +%Y%m%d-%H%M%S).tar.gz \
+  -C /usr/share/zabbix/ui/modules unifi_topology
 ```
 
-**Warning:** The next command removes only `/usr/share/zabbix/ui/modules/unifi_topology`. Run it only after the backup succeeds and only when `/usr/share/zabbix/ui/modules` is the confirmed active frontend path.
+Then deploy the current source using the same installer as the archive:
 
 ```bash
-sudo rm -rf /usr/share/zabbix/ui/modules/unifi_topology
-sudo cp -a unifi-network/source/modules/unifi_topology /usr/share/zabbix/ui/modules/
-sudo chown -R root:root /usr/share/zabbix/ui/modules/unifi_topology
+sudo ./unifi-network/install.sh
 ```
 
-Then scan the module directory in Zabbix and fully reload the dashboard. Keep the module directory name and module ID `unifi_topology`; existing master-item selection, mappings, manual topology, and refresh settings are stored with the dashboard widget. Existing widgets receive the dashboard time period as the default traffic period.
+For a non-default module root, pass the confirmed parent directory again. Then scan the module directory in Zabbix and fully reload the dashboard. Keep the module directory name and module ID `unifi_topology`; existing master-item selection, mappings, manual topology, and refresh settings are stored with the dashboard widget.
 
 **Version 0.3.0 requires the updated template.** Import `unifi_network_topology_zabbix74.yaml` with **Delete missing** disabled, review the comparison, and execute both HTTP-agent master items. The topology remains usable during low-level discovery, but traffic charts appear only after the new items have collected history.
 
