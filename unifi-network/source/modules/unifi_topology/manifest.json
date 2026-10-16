@@ -2,9 +2,9 @@
   "manifest_version": 2,
   "id": "unifi_topology",
   "type": "widget",
-  "name": "UniFi Topologie",
+  "name": "UniFi topology",
   "namespace": "UniFiTopology",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "author": "Local extension",
   "description": "Read-only UniFi topology with per-device RX/TX history, expandable endpoints and Zabbix problem severity.",
   "widget": {

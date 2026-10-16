@@ -2,7 +2,7 @@
 
 A read-only Zabbix 7.4 dashboard widget that visualizes a UniFi Network topology, links network devices to Zabbix hosts, overlays the current Zabbix problem severity, and shows per-device RX/TX traffic history. The accompanying template collects both topology and per-port device statistics from the UniFi controller.
 
-This directory contains **UniFi Topologie 0.3.1** and its **Zabbix 7.4** template. Version 0.3.1 keeps every mini chart bound to its own device, adds translucent green area fills, and makes UniFi warnings dismissible for the current dashboard page.
+This directory contains **UniFi topology 0.3.2** and its **Zabbix 7.4** template. Version 0.3.2 limits traffic charts to UniFi-managed switches and access points and uses Zabbix's widget translation API and configured user locale. It retains the individually bound mini charts, translucent green area fills, and page-local warning dismissal introduced in 0.3.1.
 
 ## Contents
 
@@ -14,6 +14,7 @@ This directory contains **UniFi Topologie 0.3.1** and its **Zabbix 7.4** templat
 - [Install the frontend module](#install-the-frontend-module)
 - [Configure the widget](#configure-the-widget)
 - [Traffic charts and data](#traffic-charts-and-data)
+- [Localization](#localization)
 - [Host mapping](#host-mapping)
 - [Manual devices and connections](#manual-devices-and-connections)
 - [Status and problem colors](#status-and-problem-colors)
@@ -28,7 +29,7 @@ This directory contains **UniFi Topologie 0.3.1** and its **Zabbix 7.4** templat
 - Draws UniFi entries with `type=DEVICE` as network nodes.
 - Displays automatic wired and wireless connections from the UniFi topology response.
 - Shows port numbers, link rates, SSIDs, channels, and experience values when UniFi supplies them.
-- Shows a compact, individually bound RX/TX chart in the upper-right corner of every network node; nodes without history open an explicit empty state instead of fabricated values.
+- Shows a compact, individually bound RX/TX chart in the upper-right corner of every switch or access point marked `unifiDevice=true`; manually added and other non-UniFi devices never receive a chart icon.
 - Opens an accessible, automatically scaled RX/TX chart dialog using the current dashboard time period.
 - Expands a selected device to show directly attached clients, network links, and open Zabbix problems.
 - Uses Zabbix's configured severity names and colors.
@@ -75,7 +76,7 @@ unifi-network/
 ├── tests/                                        # Regression and package-installation tests
 └── source/
     ├── docs/original/                            # Supplied historical Markdown documents
-    ├── modules/unifi_topology/                   # Widget source 0.3.1
+    ├── modules/unifi_topology/                   # Widget source 0.3.2
     │   ├── actions/
     │   ├── assets/
     │   ├── includes/
@@ -91,7 +92,7 @@ unifi-network/
 
 The supplied standalone HTML previews are intentionally not included because they embed a historical topology snapshot with device names and MAC addresses. The nested ZIP is also omitted because its unchanged contents are available directly below `source/modules/unifi_topology/`.
 
-The files below `source/docs/original/` document older imported releases and are retained only as historical source material. Use this guide for version 0.3.1 installation and behavior.
+The files below `source/docs/original/` document older imported releases and are retained only as historical source material. Use this guide for version 0.3.2 installation and behavior.
 
 ## Install the topology template
 
@@ -184,17 +185,17 @@ In Zabbix:
 
 1. Open **Administration → General → Modules** as a Super Admin.
 2. Select **Scan directory**.
-3. Enable **UniFi Topologie**, or verify the detected version after an update.
+3. Enable **UniFi topology**, or verify the detected version after an update.
 4. Fully reload the dashboard page.
 
 No Zabbix server restart and no additional API token are required. If an enabled PHP OPcache retains old files, refresh it using the site's normal administrative procedure.
 
 ## Configure the widget
 
-Edit a dashboard and add **UniFi Topologie**. Configure:
+Edit a dashboard and add **UniFi topology**. Configure:
 
-- **Topologie-Master-Item** — select `UniFi topology: Raw JSON` on the controller host.
-- **Traffic-Zeitraum** — keep **Dashboard** selected to follow the dashboard time selector; a custom period can be chosen per widget if required.
+- **Topology master item** — select `UniFi topology: Raw JSON` on the controller host.
+- **Traffic time period** — keep **Dashboard** selected to follow the dashboard time selector; a custom period can be chosen per widget if required.
 - **Refresh interval** — normally one minute, matching the template item.
 - **Exact Zabbix host name with `{name}`** — mapping pattern described below.
 - **Optional mapping** — explicit `MAC=Host-ID` entries.
@@ -207,9 +208,9 @@ The widget displays only topology nodes whose JSON `type` is `DEVICE` in the mai
 
 ## Traffic charts and data
 
-Each switch or access point with collected history receives a small chart in the upper-right corner of its topology node. Blue is RX and green is TX. Select the chart with a pointer, or focus it and press **Enter** or **Space**, to open the larger dialog. The dialog uses the same time period as the mini chart and automatically chooses a readable linear bit/s scale.
+Each UniFi-managed switch or access point receives a small chart in the upper-right corner of its topology node. Manually added and other non-UniFi-managed devices do not receive a traffic icon, even when they are mapped to a Zabbix host. Blue is RX and green is TX. Select the chart with a pointer, or focus it and press **Enter** or **Space**, to open the larger dialog. The dialog uses the same time period as the mini chart and automatically chooses a readable linear bit/s scale. A managed node without history displays an empty chart and an explicit no-data state instead of fabricated values.
 
-The widget does not query UniFi from the browser. It resolves the traffic items on the same controller host as the selected topology master item, then uses Zabbix's history manager to retrieve bounded, pixel-width-aggregated data. Detailed history is used while retained; older dashboard periods use Zabbix trends. A direction with no data is omitted, and a node receives no chart until at least one direction has history.
+The widget does not query UniFi from the browser. It resolves the traffic items on the same controller host as the selected topology master item, then uses Zabbix's history manager to retrieve bounded, pixel-width-aggregated data. Detailed history is used while retained; older dashboard periods use Zabbix trends. A direction with no data is omitted, and a managed node with no available series keeps an empty, clickable chart with an explicit no-data message.
 
 Traffic calculation rules:
 
@@ -220,7 +221,16 @@ Traffic calculation rules:
 - If an access point has no usable `port_table` value, its single physical `uplink` rate or counter is used.
 - Negative, missing, non-numeric, and otherwise unusable values are not converted into zero. Zabbix retains a gap instead.
 
-The chart is the sum of device-port traffic, not WAN utilization and not the sum of attached-client statistics. RX and TX are shown separately; the visual scale covers the larger of the two. Manually added nodes do not receive traffic charts because they have no matching discovered UniFi item.
+The chart is the sum of device-port traffic, not WAN utilization and not the sum of attached-client statistics. RX and TX are shown separately; the visual scale covers the larger of the two.
+
+## Localization
+
+The widget follows the Zabbix 7.4 module internationalization mechanism:
+
+- PHP labels and errors use Zabbix gettext helpers such as `_()` and `_s()`.
+- JavaScript labels are registered by `Widget::getTranslationStrings()` and resolved with Zabbix's `t()` function.
+- Dates, times, and numbers use the current Zabbix user's language code passed by the widget controller.
+- The source language and fallback for module-specific text is English. Zabbix translates strings that exist in its global frontend catalogs; Zabbix 7.4 does not provide a documented per-module locale directory for custom catalogs.
 
 ## Host mapping
 
@@ -373,7 +383,7 @@ If UniFi reports `has_unknown_switch=true`, the widget warns that intermediate d
 ## Removal
 
 1. Remove the widget from dashboards.
-2. Disable **UniFi Topologie** under **Administration → General → Modules**.
+2. Disable **UniFi topology** under **Administration → General → Modules**.
 3. Remove the `unifi_topology` module directory only after it is disabled.
 
 Removing the frontend module does not remove or modify the topology template or collected item data.

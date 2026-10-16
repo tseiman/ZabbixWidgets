@@ -8,7 +8,21 @@ class UniFiTopologyView {
         this.expired = false;
         this.trafficDialog = null;
         this.dismissedWarnings = new Set();
+        this.locale = undefined;
         this.root.classList.add('ut-root');
+    }
+    setLocale(locale) {
+        const candidate = typeof locale === 'string' && locale !== 'default'
+            ? locale.replace('_', '-')
+            : undefined;
+        try {
+            this.locale = candidate && Intl.DateTimeFormat.supportedLocalesOf([candidate]).length
+                ? candidate
+                : undefined;
+        }
+        catch (error) {
+            this.locale = undefined;
+        }
     }
     el(tag, text, cls) {
         const node = document.createElement(tag);
@@ -46,16 +60,16 @@ class UniFiTopologyView {
         }
     }
     status(node) {
-        if (this.expired) return {color: '#94a3b8', label: 'Status veraltet', severity: -1};
+        if (this.expired) return {color: '#94a3b8', label: t('Status is stale'), severity: -1};
         if (node.problems.length) {
             const severity = Math.max(...node.problems.map(problem => problem.severity));
-            const configured = this.data.severities[severity] || {name: 'Problem', color: '#e45959'};
+            const configured = this.data.severities[severity] || {name: t('Problem'), color: '#e45959'};
             const color = /^#[0-9a-f]{6}$/i.test(configured.color) ? configured.color : '#e45959';
             return {color, label: configured.name + ' · ' + node.problems.length, severity};
         }
-        if (node.manual && !node.hostid) return {color: '#94a3b8', label: 'Manuell · Status unbekannt', severity: -1};
-        if (!node.hostid || !node.monitored) return {color: '#94a3b8', label: node.hostid ? 'Monitoring deaktiviert' : 'Status unbekannt', severity: -1};
-        return {color: '#2c9975', label: 'Keine offenen Probleme', severity: -1};
+        if (node.manual && !node.hostid) return {color: '#94a3b8', label: t('Manual') + ' · ' + t('Status unknown'), severity: -1};
+        if (!node.hostid || !node.monitored) return {color: '#94a3b8', label: node.hostid ? t('Monitoring disabled') : t('Status unknown'), severity: -1};
+        return {color: '#2c9975', label: t('No open problems'), severity: -1};
     }
     layout(nodes, edges) {
         const ids = new Set(nodes.map(node => node.mac));
@@ -113,7 +127,7 @@ class UniFiTopologyView {
             unit++;
         }
         const digits = number >= 100 || unit === 0 ? 0 : number >= 10 ? 1 : 2;
-        return number.toLocaleString(undefined, {maximumFractionDigits: digits}) + ' ' + units[unit];
+        return number.toLocaleString(this.locale, {maximumFractionDigits: digits}) + ' ' + units[unit];
     }
     _niceMaximum(value) {
         if (!Number.isFinite(value) || value <= 0) return 1;
@@ -190,7 +204,7 @@ class UniFiTopologyView {
     }
     _miniTraffic(node, point) {
         const period = this.data?.traffic_period;
-        if (!period) return null;
+        if (!period || node.managed !== true) return null;
         const values = this._trafficPoints(node).map(point => Number(point[1])).filter(Number.isFinite);
         const maximum = this._niceMaximum(Math.max(1, ...values));
         const dimensions = {left: 2, top: 2, width: 68, height: 26};
@@ -200,12 +214,12 @@ class UniFiTopologyView {
             tabindex: 0,
             role: 'button',
             'data-traffic-mac': node.mac,
-            'aria-label': node.name + ': Traffic-Diagramm vergrößern'
+            'aria-label': node.name + ': ' + t('Enlarge traffic chart')
         });
         const available = values.length > 0;
         mini.append(this.svg('title', {}, available
-            ? 'RX ' + this._formatBits(node.traffic?.rx?.latest) + ' · TX ' + this._formatBits(node.traffic?.tx?.latest) + ' · zum Vergrößern anklicken'
-            : node.name + ': Für diesen Zeitraum sind keine Traffic-Daten verfügbar.'));
+            ? 'RX ' + this._formatBits(node.traffic?.rx?.latest) + ' · TX ' + this._formatBits(node.traffic?.tx?.latest) + ' · ' + t('Click to enlarge')
+            : node.name + ': ' + t('No traffic data is available for this time period.')));
         mini.append(this.svg('rect', {width: 72, height: 30, rx: 5, class: 'ut-traffic-mini-bg'}));
         for (const direction of ['rx', 'tx']) {
             for (const area of this._seriesAreaPaths(node.traffic?.[direction]?.points, dimensions, period, maximum)) {
@@ -250,8 +264,8 @@ class UniFiTopologyView {
         const heading = this.el('div');
         const title = this.el('h3', node.name + ' · RX/TX');
         title.id = 'ut-traffic-title-' + node.mac.replaceAll(':', '');
-        heading.append(title, this.el('p', 'Gesamtdurchsatz aller eindeutigen physischen Ports', 'ut-traffic-subtitle'));
-        const close = this.button('Schließen', () => dialog.close());
+        heading.append(title, this.el('p', t('Total throughput of all unique physical ports'), 'ut-traffic-subtitle'));
+        const close = this.button(t('Close'), () => dialog.close());
         close.classList.add('ut-traffic-close');
         header.append(heading, close);
         dialog.append(header);
@@ -267,14 +281,14 @@ class UniFiTopologyView {
         const period = this.data.traffic_period;
         const all = this._trafficPoints(node).map(point => Number(point[1])).filter(Number.isFinite);
         if (!all.length) {
-            dialog.append(this.el('p', 'Für diesen Zeitraum sind keine Traffic-Daten verfügbar.', 'ut-traffic-empty'));
+            dialog.append(this.el('p', t('No traffic data is available for this time period.'), 'ut-traffic-empty'));
         }
         else {
             const maximum = this._niceMaximum(Math.max(1, ...all));
             const view = {width: 900, height: 380};
             const dimensions = {left: 82, top: 18, width: 792, height: 300};
             const graph = this.svg('svg', {viewBox: '0 0 ' + view.width + ' ' + view.height, role: 'img',
-                'aria-label': 'RX- und TX-Durchsatz von ' + node.name});
+                'aria-label': t('RX and TX throughput of') + ' ' + node.name});
             graph.classList.add('ut-traffic-chart');
             for (let i = 0; i <= 5; i++) {
                 const y = dimensions.top + dimensions.height * i / 5;
@@ -288,8 +302,8 @@ class UniFiTopologyView {
                 const x = dimensions.left + dimensions.width * i / 5;
                 const date = new Date(clock * 1000);
                 const label = duration > 172800
-                    ? date.toLocaleDateString(undefined, {month: 'short', day: '2-digit'})
-                    : date.toLocaleTimeString(undefined, {hour: '2-digit', minute: '2-digit'});
+                    ? date.toLocaleDateString(this.locale, {month: 'short', day: '2-digit'})
+                    : date.toLocaleTimeString(this.locale, {hour: '2-digit', minute: '2-digit'});
                 graph.append(this.svg('text', {x, y: dimensions.top + dimensions.height + 28, 'text-anchor': i === 0 ? 'start' : i === 5 ? 'end' : 'middle', class: 'ut-traffic-axis'}, label));
             }
             for (const direction of ['rx', 'tx']) {
@@ -311,10 +325,10 @@ class UniFiTopologyView {
         }
 
         const source = direction => node.traffic?.[direction]
-            ? (node.traffic[direction].source === 'direct' ? 'Controller-Port-Raten' : 'aus Port-Zählerdifferenzen')
-            : 'keine Daten';
-        const from = new Date(period.from * 1000).toLocaleString();
-        const to = new Date(period.to * 1000).toLocaleString();
+            ? (node.traffic[direction].source === 'direct' ? t('Controller port rates') : t('from port counter differences'))
+            : t('No data');
+        const from = new Date(period.from * 1000).toLocaleString(this.locale);
+        const to = new Date(period.to * 1000).toLocaleString(this.locale);
         dialog.append(this.el('p', from + ' – ' + to + ' · RX: ' + source('rx') + ' · TX: ' + source('tx'), 'ut-traffic-footnote'));
 
         dialog.addEventListener('close', () => {
@@ -338,8 +352,8 @@ class UniFiTopologyView {
         notice.append(this.el('span', warning));
         const close = this.el('button', '×', 'ut-notice-close');
         close.type = 'button';
-        close.setAttribute('aria-label', 'Warnung schließen');
-        close.title = 'Warnung schließen';
+        close.setAttribute('aria-label', t('Close warning'));
+        close.title = t('Close warning');
         close.addEventListener('click', () => {
             this.dismissedWarnings.add(warning);
             notice.remove();
@@ -359,28 +373,28 @@ class UniFiTopologyView {
         const edges = data.edges.filter(edge => deviceIds.has(edge.up) && deviceIds.has(edge.down));
         const toolbar = this.el('div', null, 'ut-toolbar');
         const heading = this.el('div');
-        heading.append(this.el('strong', devices.length + ' Netzwerkgeräte', 'ut-title'));
+        heading.append(this.el('strong', devices.length + ' ' + t('Network devices'), 'ut-title'));
         const mapped = devices.filter(node => node.hostid).length;
-        heading.append(this.el('span', mapped + '/' + devices.length + ' Hosts zugeordnet · ' + edges.length + ' Verbindungen', 'ut-subtitle'));
+        heading.append(this.el('span', mapped + '/' + devices.length + ' ' + t('hosts mapped') + ' · ' + edges.length + ' ' + t('links'), 'ut-subtitle'));
         toolbar.append(heading);
         const controls = this.el('div', null, 'ut-controls');
-        controls.append(this.button('−', () => this.setZoom(this.zoom - 0.2)), this.button('Anpassen', () => this.setZoom(1)), this.button('+', () => this.setZoom(this.zoom + 0.2)));
-        controls.children[0].setAttribute('aria-label', 'Verkleinern');
-        controls.children[2].setAttribute('aria-label', 'Vergrößern');
+        controls.append(this.button('−', () => this.setZoom(this.zoom - 0.2)), this.button(t('Fit'), () => this.setZoom(1)), this.button('+', () => this.setZoom(this.zoom + 0.2)));
+        controls.children[0].setAttribute('aria-label', t('Zoom out'));
+        controls.children[2].setAttribute('aria-label', t('Zoom in'));
         toolbar.append(controls);
         this.root.append(toolbar);
-        if (data.demo) this.root.append(this.el('div', 'DEMO · Älterer Topologie-Schnappschuss. Alle Problemstände sind simuliert, kein Live-Status.', 'ut-notice'));
-        if (this.expired) this.root.append(this.el('div', 'Keine aktuellen Statusdaten. Die Anzeige ist veraltet; Dashboard-Aktualisierung prüfen.', 'ut-alert'));
+        if (data.demo) this.root.append(this.el('div', t('DEMO · Older topology snapshot. All problem states are simulated; no live status.'), 'ut-notice'));
+        if (this.expired) this.root.append(this.el('div', t('No current status data. The display is stale; check dashboard refresh.'), 'ut-alert'));
         for (const warning of data.warnings) {
             if (!this.dismissedWarnings.has(warning)) this.root.append(this._dismissibleWarning(warning));
         }
         if (!devices.length) {
-            this.root.append(this.el('p', 'Keine Knoten mit type=DEVICE in der Antwort.'));
+            this.root.append(this.el('p', t('No nodes with type=DEVICE were returned.')));
             return;
         }
         const graph = this.layout(devices, edges);
         const canvas = this.el('div', null, 'ut-canvas');
-        const svg = this.svg('svg', {viewBox: '0 0 ' + graph.width + ' ' + graph.height, role: 'group', 'aria-label': 'UniFi Netzwerkübersicht'});
+        const svg = this.svg('svg', {viewBox: '0 0 ' + graph.width + ' ' + graph.height, role: 'group', 'aria-label': t('UniFi network overview')});
         svg.style.width = (100 * this.zoom) + '%';
         svg.style.minWidth = (Math.min(graph.width, 760) * this.zoom) + 'px';
         const paths = this.svg('g');
@@ -395,7 +409,7 @@ class UniFiTopologyView {
             if (edge.manual) path.setAttribute('stroke', '#8873b2');
             path.append(this.svg('title', {}, this.edgeText(edge, index)));
             paths.append(path);
-            const label = edge.manual ? 'Manuell: ' + this.short(edge.label || 'Verbindung', 18) : 'P' + (edge.uplinkPortNumber ?? '?') + ' → P' + (edge.downlinkPortNumber ?? '?');
+            const label = edge.manual ? t('Manual') + ': ' + this.short(edge.label || t('Link'), 18) : 'P' + (edge.uplinkPortNumber ?? '?') + ' → P' + (edge.downlinkPortNumber ?? '?');
             const labelWidth = edge.manual ? 170 : 106;
             const x = (a.x + b.x) / 2;
             labels.append(this.svg('rect', {x: x - labelWidth / 2, y: mid - 10, width: labelWidth, height: 21, rx: 6, class: 'ut-link-label-bg'}));
@@ -406,11 +420,11 @@ class UniFiTopologyView {
             const point = graph.points.get(node.mac);
             const status = this.status(node);
             const selected = this.selected === node.mac;
-            const group = this.svg('g', {transform: 'translate(' + (point.x - 125) + ',' + point.y + ')', tabindex: 0, role: 'button', 'aria-label': node.name + ', ' + status.label + ', Endgeräte und Probleme anzeigen', 'aria-expanded': selected ? 'true' : 'false', 'data-mac': node.mac, class: 'ut-node' + (selected ? ' ut-selected' : '')});
+            const group = this.svg('g', {transform: 'translate(' + (point.x - 125) + ',' + point.y + ')', tabindex: 0, role: 'button', 'aria-label': node.name + ', ' + status.label + ', ' + t('show clients and problems'), 'aria-expanded': selected ? 'true' : 'false', 'data-mac': node.mac, class: 'ut-node' + (selected ? ' ut-selected' : '')});
             group.append(this.svg('rect', {width: 250, height: 96, rx: 12, class: 'ut-node-bg', stroke: status.color, 'stroke-width': status.severity >= 0 ? 4 : 2}));
             group.append(this.svg('circle', {cx: 19, cy: 24, r: 5, fill: status.color}));
-            group.append(this.svg('text', {x: 32, y: 29, class: 'ut-node-name'}, this.short(node.name, 13)));
-            group.append(this.svg('text', {x: 14, y: 55, class: 'ut-node-model'}, (node.manual ? 'Manuell ergänzt' : node.wireless ? 'Access Point' : 'Netzwerkgerät') + (node.model ? ' · ' + node.model : '')));
+            group.append(this.svg('text', {x: 32, y: 29, class: 'ut-node-name'}, this.short(node.name, node.managed === true ? 13 : 25)));
+            group.append(this.svg('text', {x: 14, y: 55, class: 'ut-node-model'}, (node.manual ? t('Added manually') : node.wireless ? t('Access point') : t('Network device')) + (node.model ? ' · ' + node.model : '')));
             group.append(this.svg('text', {x: 14, y: 80, class: 'ut-node-status'}, status.label));
             group.append(this.svg('title', {}, node.name + '\n' + node.mac + '\n' + status.label + '\n' + (node.host_name || node.mapping)));
             const traffic = this._miniTraffic(node, point);
@@ -442,13 +456,13 @@ class UniFiTopologyView {
             item.append(dot, document.createTextNode(severity.name));
             legend.append(item);
         });
-        if (edges.some(edge => edge.manual)) legend.append(this.el('span', '╌╌ Manuelle Verbindung', 'ut-legend-item'));
+        if (edges.some(edge => edge.manual)) legend.append(this.el('span', '╌╌ ' + t('Manual link'), 'ut-legend-item'));
         this.root.append(legend);
         if (this.selected && index.has(this.selected)) this.details(index.get(this.selected), index);
-        else this.root.append(this.el('p', 'Gerät anklicken: zugeordnete Endgeräte, Verbindungen und aktuelle Probleme.', 'ut-hint'));
+        else this.root.append(this.el('p', t('Click a device to show mapped clients, links, and current problems.'), 'ut-hint'));
         const footer = this.el('div', null, 'ut-footer');
-        footer.append(this.el('span', 'Topologie: ' + new Date(data.clock * 1000).toLocaleString() + (data.stale ? ' · VERALTET' : '')));
-        footer.append(this.el('span', 'Problemstand: ' + new Date(data.checked_at * 1000).toLocaleTimeString() + ' · ' + (data.show_suppressed ? 'inkl. unterdrückter Meldungen' : 'ohne unterdrückte Meldungen')));
+        footer.append(this.el('span', t('Topology') + ': ' + new Date(data.clock * 1000).toLocaleString(this.locale) + (data.stale ? ' · ' + t('STALE') : '')));
+        footer.append(this.el('span', t('Problem status') + ': ' + new Date(data.checked_at * 1000).toLocaleTimeString(this.locale) + ' · ' + (data.show_suppressed ? t('including suppressed problems') : t('excluding suppressed problems'))));
         this.root.append(footer);
     }
     short(text, length) {
@@ -459,66 +473,68 @@ class UniFiTopologyView {
         this.render();
     }
     edgeText(edge, index) {
-        if (edge.manual) return (index.get(edge.up)?.name || edge.up) + ' → ' + (index.get(edge.down)?.name || edge.down) + ' · manuell' + (edge.label ? ': ' + edge.label : '');
+        if (edge.manual) return (index.get(edge.up)?.name || edge.up) + ' → ' + (index.get(edge.down)?.name || edge.down) + ' · ' + t('manual') + (edge.label ? ': ' + edge.label : '');
         return (index.get(edge.up)?.name || edge.up) + ' P' + (edge.uplinkPortNumber ?? '?') + ' → ' + (index.get(edge.down)?.name || edge.down) + ' P' + (edge.downlinkPortNumber ?? '?') + (edge.rateMbps !== null ? ' · ' + edge.rateMbps + ' Mbit/s' : '');
     }
     details(node, index) {
         const panel = this.el('section', null, 'ut-details');
         const title = this.el('div', null, 'ut-toolbar');
         title.append(this.el('h3', node.name));
-        title.append(this.button('Schließen', () => { this.selected = null; this.render(); }));
-        panel.append(title, this.el('p', (node.manual ? 'Manuelle ID: ' + node.mac.slice(7) : node.mac) + (node.hostid ? ' · Zabbix-Host ' + node.hostid + ': ' + node.host_name : ' · ' + node.mapping), 'ut-meta'));
-        if (node.hostid) panel.append(this.el('p', node.mapping + (node.maintenance ? ' · Wartung aktiv' : ''), 'ut-meta'));
+        title.append(this.button(t('Close'), () => { this.selected = null; this.render(); }));
+        panel.append(title, this.el('p', (node.manual ? t('Manual ID') + ': ' + node.mac.slice(7) : node.mac) + (node.hostid ? ' · ' + t('Zabbix host') + ' ' + node.hostid + ': ' + node.host_name : ' · ' + node.mapping), 'ut-meta'));
+        if (node.hostid) panel.append(this.el('p', node.mapping + (node.maintenance ? ' · ' + t('Maintenance active') : ''), 'ut-meta'));
         if (node.traffic) {
             const trafficSummary = this.el('div', null, 'ut-traffic-summary');
             trafficSummary.append(
                 this.el('span', 'RX ' + this._formatBits(node.traffic.rx?.latest) + ' · TX ' + this._formatBits(node.traffic.tx?.latest)),
-                this.button('Traffic vergrößern', event => this._openTraffic(node, event.currentTarget))
+                this.button(t('Enlarge traffic'), event => this._openTraffic(node, event.currentTarget))
             );
             panel.append(trafficSummary);
         }
-        panel.append(this.el('h4', 'Probleme'));
-        if (this.expired) panel.append(this.el('p', 'Problemstatus ist veraltet.'));
-        if (!node.problems.length) panel.append(this.el('p', node.hostid && node.monitored ? 'Keine offenen, für dich sichtbaren Probleme im gewählten Filter.' : 'Kein aktiver, eindeutig zugeordneter Zabbix-Host. Status unbekannt.'));
+        panel.append(this.el('h4', t('Problems')));
+        if (this.expired) panel.append(this.el('p', t('Problem status is stale.')));
+        if (!node.problems.length) panel.append(this.el('p', node.hostid && node.monitored
+            ? t('No open problems visible to you in the selected filter.')
+            : t('No active, unambiguously mapped Zabbix host. Status unknown.')));
         const list = this.el('ul', null, 'ut-problems');
         [...node.problems].sort((a, b) => b.severity - a.severity).forEach(problem => {
             const li = this.el('li');
             const severity = this.data.severities[problem.severity];
-            const badge = this.el('span', severity?.name || 'Problem', 'ut-badge');
+            const badge = this.el('span', severity?.name || t('Problem'), 'ut-badge');
             if (/^#[0-9a-f]{6}$/i.test(severity?.color)) badge.style.backgroundColor = severity.color;
             const link = this.el('a', problem.name);
             if (/^[0-9]+$/.test(problem.triggerid) && /^[0-9]+$/.test(problem.eventid)) {
                 link.href = 'tr_events.php?triggerid=' + problem.triggerid + '&eventid=' + problem.eventid;
                 if (this.data.demo) link.addEventListener('click', event => { event.preventDefault(); });
             }
-            li.append(badge, link, this.el('span', ' · seit ' + new Date(problem.clock * 1000).toLocaleString() + (problem.acknowledged ? ' · bestätigt' : '') + (problem.suppressed ? ' · unterdrückt' : ''), 'ut-meta'));
+            li.append(badge, link, this.el('span', ' · ' + t('since') + ' ' + new Date(problem.clock * 1000).toLocaleString(this.locale) + (problem.acknowledged ? ' · ' + t('acknowledged') : '') + (problem.suppressed ? ' · ' + t('suppressed') : ''), 'ut-meta'));
             list.append(li);
         });
         panel.append(list);
         const clients = this.data.edges.filter(edge => edge.up === node.mac && index.get(edge.down)?.type !== 'DEVICE');
-        panel.append(this.el('h4', 'Endgeräte (' + new Set(clients.map(edge => edge.down)).size + ')'));
-        if (!clients.length) panel.append(this.el('p', 'Keine Endgeräte unmittelbar diesem Gerät zugeordnet. Endgeräte hinter anderen Switches erscheinen dort.'));
+        panel.append(this.el('h4', t('Clients') + ' (' + new Set(clients.map(edge => edge.down)).size + ')'));
+        if (!clients.length) panel.append(this.el('p', t('No clients are mapped directly to this device. Clients behind other switches appear there.')));
         else {
             const table = this.el('table', null, 'ut-table');
             const header = this.el('tr');
-            ['Endgerät', 'MAC', 'Verbindung', 'Details'].forEach(label => header.append(this.el('th', label)));
+            [t('Client'), 'MAC', t('Link'), t('Details')].forEach(label => header.append(this.el('th', label)));
             const thead = this.el('thead'); thead.append(header); table.append(thead);
             const body = this.el('tbody');
             clients.sort((a, b) => index.get(a.down).name.localeCompare(index.get(b.down).name)).forEach(edge => {
                 const row = this.el('tr'), client = index.get(edge.down);
                 const details = edge.type === 'WIRELESS'
-                    ? [edge.essid, edge.channel !== null ? 'Kanal ' + edge.channel : null, edge.experienceScore !== null ? 'Experience ' + edge.experienceScore : null].filter(value => value !== null).join(' · ')
-                    : (edge.rateMbps !== null ? edge.rateMbps + ' Mbit/s' : 'Linkrate unbekannt');
-                [client.name, client.mac, edge.type === 'WIRELESS' ? 'WLAN' : 'Port ' + (edge.uplinkPortNumber ?? '?'), details].forEach(value => row.append(this.el('td', value)));
+                    ? [edge.essid, edge.channel !== null ? t('Channel') + ' ' + edge.channel : null, edge.experienceScore !== null ? 'Experience ' + edge.experienceScore : null].filter(value => value !== null).join(' · ')
+                    : (edge.rateMbps !== null ? edge.rateMbps + ' Mbit/s' : t('Link speed unknown'));
+                [client.name, client.mac, edge.type === 'WIRELESS' ? 'WLAN' : t('Port') + ' ' + (edge.uplinkPortNumber ?? '?'), details].forEach(value => row.append(this.el('td', value)));
                 body.append(row);
             });
             table.append(body);
             const wrap = this.el('div', null, 'ut-table-scroll'); wrap.append(table); panel.append(wrap);
         }
-        panel.append(this.el('h4', 'Netzwerkverbindungen'));
+        panel.append(this.el('h4', t('Network links')));
         const connections = this.el('ul', null, 'ut-connections');
         this.data.edges.filter(edge => (edge.up === node.mac || edge.down === node.mac) && index.get(edge.up)?.type === 'DEVICE' && index.get(edge.down)?.type === 'DEVICE').forEach(edge => connections.append(this.el('li', this.edgeText(edge, index))));
-        if (!connections.children.length) connections.append(this.el('li', 'Keine Verbindung zu einem anderen Netzwerkgerät im JSON.'));
+        if (!connections.children.length) connections.append(this.el('li', t('No link to another network device exists in the JSON.')));
         panel.append(connections);
         this.root.append(panel);
     }
@@ -559,16 +575,17 @@ class CWidgetUniFiTopology extends CWidget {
             this._body.replaceChildren(root);
             this._utView = new UniFiTopologyView(root);
         }
-        if (response.topology_error || !response.topology) this._utView.showError(response.topology_error || 'Keine Topologiedaten erhalten.');
+        this._utView.setLocale(response.locale);
+        if (response.topology_error || !response.topology) this._utView.showError(response.topology_error || t('No topology data received.'));
         else this._utView.setData(response.topology);
     }
     processUpdateErrorResponse(error) {
-        this._utView?.showError('Status konnte nicht aktualisiert werden. Keine aktuelle Problembewertung verfügbar.');
+        this._utView?.showError(t('Status could not be updated. No current problem assessment is available.'));
         super.processUpdateErrorResponse(error);
     }
     promiseUpdate() {
         return super.promiseUpdate().catch(error => {
-            if (error.name !== 'AbortError') this._utView?.showError('Verbindung zum Zabbix-Frontend fehlgeschlagen. Status unbekannt.');
+            if (error.name !== 'AbortError') this._utView?.showError(t('Connection to the Zabbix frontend failed. Status unknown.'));
             throw error;
         });
     }

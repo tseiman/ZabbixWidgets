@@ -1,89 +1,78 @@
-# Manuelle Geräte und Verbindungen – Version 0.2.0
+# Manual Devices and Links — Version 0.2.0 and Later
 
-Die Ergänzungen werden im Bearbeitungsdialog des Widgets eingetragen und mit dem Dashboard gespeichert. Sie gelten nur für dieses Widget. Beide Felder sind standardmäßig leer; dann bleibt die automatische Topologie unverändert.
+Manual additions are entered in the widget edit dialog and stored with the dashboard. They affect only that widget. Both fields are empty by default, leaving the automatic UniFi topology unchanged.
 
-## Zusätzliche Geräte
+## Additional devices
 
-Eine Zeile je Gerät:
+Enter one device per line:
 
 ```text
-id | Anzeigename | optionale Zabbix-Host-ID
+id | display name | optional Zabbix host ID
 ```
 
-Beispiel:
+Example:
 
 ```text
 internet | Internet
 firewall | Firewall
-standort_b | Standort B
+site_b | Site B
 ```
 
-Die ID beginnt mit einem kleinen Buchstaben und darf kleine Buchstaben, Ziffern, Unterstriche und Bindestriche enthalten (maximal 40 Zeichen). Namen sind frei wählbar. Das Trennzeichen `|` darf nicht im Namen stehen.
+The ID must start with a lowercase letter and may contain lowercase letters, digits, underscores, and hyphens, with a maximum length of 40 characters. Display names may be chosen freely but cannot contain `|`.
 
-Eine dritte Spalte verbindet den Knoten optional mit einem vorhandenen Zabbix-Host. Beispiel mit **fiktiver** Host-ID:
+A third column can link the node to an existing Zabbix host. This example uses a **fictitious** host ID:
 
 ```text
 firewall | Firewall | 12345
 ```
 
-Ohne Host-ID wird kein grüner Gesundheitsstatus erfunden. Der Knoten zeigt „Manuell · Status unbekannt“. Mit einer lesbaren Host-ID gelten dieselben Problemfarben wie bei UniFi-Geräten. Eine Host-ID darf nicht mehreren Knoten zugeordnet sein; dann wird die Zuordnung als mehrdeutig behandelt.
+Without a host ID, the widget does not invent a healthy state; it displays **Manual · Status unknown**. With a readable host ID, the same problem colors as for UniFi devices apply. One host ID cannot map to multiple nodes; such a mapping is treated as ambiguous.
 
-## Zusätzliche Verbindungen
+Manual devices are not managed by UniFi. They therefore never receive a traffic mini-chart icon, even when mapped to a Zabbix host.
 
-Eine Zeile je Verbindung:
+## Additional links
+
+Enter one link per line:
 
 ```text
-von | nach | optionale Beschriftung
+from | to | optional label
 ```
 
-Als Endpunkt ist entweder eine oben definierte manuelle ID oder die echte MAC-Adresse eines Netzwerkgeräts aus dem UniFi-JSON erlaubt. Die MAC-Adresse steht im Detailbereich beim Anklicken des Geräts.
+An endpoint is either a manual ID defined above or the actual MAC address of a network device from the UniFi JSON. The MAC address appears in device details.
 
-Allgemeines Beispiel mit **fiktiven** MAC-Adressen:
+Generic example with **fictitious** MAC addresses:
 
 ```text
 internet | firewall | WAN
-firewall | aa:bb:cc:dd:ee:01 | Internes LAN
-firewall | aa:bb:cc:dd:ee:02 | Kameranetz / Port 3
+firewall | aa:bb:cc:dd:ee:01 | Internal LAN
+firewall | aa:bb:cc:dd:ee:02 | Camera network / Port 3
 ```
 
-Die MAC-Adressen vor dem Speichern durch die tatsächlichen Adressen ersetzen. Die Reihenfolge „von → nach“ bestimmt die bevorzugte Anordnung von oben nach unten; sie behauptet keine Verkehrsfreigabe durch eine Firewall. Die Beschriftung ist frei, etwa Netzname, VLAN oder Portangaben. Eine manuelle Verbindung ist immer gestrichelt und mit „Manuell“ gekennzeichnet.
+Replace example MAC addresses with actual addresses before saving. The `from → to` order influences the preferred top-to-bottom layout; it does not claim traffic is permitted through a firewall. Labels can contain a network name, VLAN, or port information. Manual links are dashed and marked **Manual**.
 
-IDs statt Gerätenamen vermeiden Verwechslungen nach Umbenennung oder bei gleichnamigen Geräten. Die interne ID `manual:...` ist kein MAC-Wert und muss nicht eingetragen werden.
+IDs avoid ambiguity when devices are renamed or share a display name. The internal `manual:...` prefix is not a MAC address and must not be entered.
 
-## Verhalten bei Änderungen
+## Behavior when topology changes
 
-- Automatische UniFi-Verbindungen bleiben unverändert.
-- Liefert UniFi später selbst eine Verbindung zwischen denselben Endpunkten, hat diese Vorrang; der manuelle Doppeleintrag wird mit Hinweis ausgelassen.
-- Fehlt eine referenzierte UniFi-MAC im aktuellen JSON, bleibt die Konfiguration gespeichert. Der Link wird mit Hinweis ausgelassen, bis der Knoten wieder vorhanden ist.
-- Tippfehler bei manuellen IDs, doppelte IDs/Verbindungen, Selbstverbindungen und ungültige Host-IDs werden beim Speichern beanstandet.
-- Es gibt höchstens eine manuelle logische Verbindung je Gerätepaar. Parallele physische Kabel müssen in der Beschriftung beschrieben werden.
-- Ein Link zu einem UniFi-Client wird nicht als Netzwerkverbindung gezeichnet; dafür bleibt die vorhandene Endgeräteliste zuständig.
-- Der Hinweis auf unbekannte Switches aus UniFi bleibt sichtbar. Manuelle Ergänzungen beweisen nicht, dass die automatische Topologie vollständig ist.
-- Bis zu 50 zusätzliche Knoten und 100 zusätzliche Links; außerdem gelten die Feldlängenlimits des Zabbix-Formulars.
-- Leere Zeilen und mit `#` beginnende Kommentarzeilen werden ignoriert.
+- Automatic UniFi links remain unchanged.
+- If UniFi later supplies the same endpoint pair, the automatic link takes precedence and the duplicate manual link is omitted with a warning.
+- If a referenced UniFi MAC is absent from the current JSON, configuration remains saved. The link is omitted with a warning until the node returns.
+- Misspelled IDs, duplicate IDs or links, self-links, and invalid host IDs are rejected when saving.
+- Only one manual logical link is allowed per device pair. Describe parallel physical cables in the label.
+- A link to a UniFi client is not drawn as a network link; clients remain in the device detail list.
+- The UniFi unknown-switch warning remains visible. Manual additions do not prove the automatic topology is complete.
+- Limits are 50 additional nodes and 100 additional links, plus Zabbix form field-length limits.
+- Empty lines and lines beginning with `#` are ignored.
 
-Das Widget zeichnet die ergänzte Übersicht; es ändert keine Firewall-Regeln, UniFi-Konfiguration, Zabbix-Hosts oder klassischen Zabbix-Maps.
+The widget only renders the augmented overview. It does not modify firewall rules, UniFi configuration, Zabbix hosts, or classic Zabbix maps.
 
-## Update von 0.1.0 im vorhandenen Container
+## Updating an existing installation
 
-Paket `unifi_topology_zabbix74_v0.2.0.tar.gz` nach `/tmp` des Zabbix-Containers übertragen. Der bei dir bereits bestätigte Modulpfad ist `/usr/share/zabbix/ui/modules`.
-
-Als root zunächst sichern:
+Use the current rolling release and installer documented in `README.md`. Do not overlay old 0.2.0 archives onto a current installation. Keep an operator-controlled backup before a production update:
 
 ```bash
-tar -czf /tmp/unifi_topology-backup-$(date +%Y%m%d-%H%M%S).tar.gz -C /usr/share/zabbix/ui/modules unifi_topology
+sudo tar -czf /var/backups/unifi_topology-$(date +%Y%m%d-%H%M%S).tar.gz \
+  -C /usr/share/zabbix/ui/modules unifi_topology
 ```
 
-Nur nach erfolgreicher Sicherung die neue Version darüber entpacken:
-
-```bash
-tar --no-same-owner -xzf /tmp/unifi_topology_zabbix74_v0.2.0.tar.gz -C /usr/share/zabbix/ui/modules
-```
-
-Dann in Zabbix **Administration → General → Modules → Scan directory** ausführen und die Dashboard-Seite vollständig neu laden, damit neues JavaScript geladen wird. Das bestehende Widget bearbeiten: Die beiden zusätzlichen Felder sollten erscheinen. Vorhandenes Master-Item, Zuordnungen und Intervall bleiben gespeichert.
-
-Das Modul nicht löschen oder neu benennen; seine ID bleibt `unifi_topology`. Falls die Oberfläche alte PHP-Dateien verwendet, den PHP-OPcache im Rahmen der üblichen Administration aktualisieren.
-
-## Teststand
-
-Die bestehende Datenauswertung und neue Konfiguration wurden lokal mit simulierten Zabbix-Antworten getestet. Geprüft wurden zusätzliche Knoten/Links, Problemfarben optional verknüpfter Hosts, fehlende Berechtigungen, doppelte/fehlende Endpunkte, Escaping und die Darstellung. Ein Live-Test der Version 0.2.0 in deinem Zabbix steht noch aus.
+After installation, run **Administration → General → Modules → Scan directory** and fully reload the dashboard so the new JavaScript is loaded. Existing master-item selection, mappings, manual topology, and refresh settings remain stored with the widget as long as the module ID stays `unifi_topology`.

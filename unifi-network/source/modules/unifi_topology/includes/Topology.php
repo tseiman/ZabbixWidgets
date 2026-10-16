@@ -10,7 +10,7 @@ class Topology {
     public static function mac($value): string {
         $value = strtolower(str_replace('-', ':', (string) $value));
         if (!preg_match('/^(?:[0-9a-f]{2}:){5}[0-9a-f]{2}$/D', $value)) {
-            throw new InvalidArgumentException('Ungueltige oder fehlende MAC-Adresse im Topologie-JSON.');
+            throw new InvalidArgumentException(_('Invalid or missing MAC address in topology JSON.'));
         }
         return $value;
     }
@@ -24,11 +24,11 @@ class Topology {
             }
             $pair = array_map('trim', explode('=', $line, 2));
             if (count($pair) !== 2 || !preg_match('/^[1-9][0-9]*$/D', $pair[1])) {
-                throw new InvalidArgumentException('Zuordnung erwartet MAC=Host-ID, eine Zuordnung pro Zeile.');
+                throw new InvalidArgumentException(_('Mapping must use MAC=host ID, one mapping per line.'));
             }
             $mac = self::mac($pair[0]);
             if (isset($bindings[$mac])) {
-                throw new InvalidArgumentException('Doppelte MAC-Adresse in der Host-Zuordnung.');
+                throw new InvalidArgumentException(_('Duplicate MAC address in host mapping.'));
             }
             $bindings[$mac] = $pair[1];
         }
@@ -37,7 +37,7 @@ class Topology {
 
     private function result($value): array {
         if (!is_array($value)) {
-            throw new RuntimeException('Zabbix-Abfrage fehlgeschlagen oder Berechtigung fehlt.');
+            throw new RuntimeException(_('Zabbix query failed or permission is missing.'));
         }
         return $value;
     }
@@ -45,19 +45,19 @@ class Topology {
     public static function normalize(array $raw): array {
         if (!isset($raw['vertices'], $raw['edges']) || !is_array($raw['vertices']) || !is_array($raw['edges'])
                 || $raw['vertices'] !== array_values($raw['vertices']) || $raw['edges'] !== array_values($raw['edges'])) {
-            throw new InvalidArgumentException('vertices und edges muessen JSON-Listen sein.');
+            throw new InvalidArgumentException(_('The vertices and edges fields must be JSON arrays.'));
         }
         if (count($raw['vertices']) > 1000 || count($raw['edges']) > 3000) {
-            throw new InvalidArgumentException('Topologie zu gross: maximal 1000 Knoten und 3000 Verbindungen.');
+            throw new InvalidArgumentException(_('Topology is too large: at most 1000 nodes and 3000 links are allowed.'));
         }
         $nodes = [];
         foreach ($raw['vertices'] as $vertex) {
             if (!is_array($vertex)) {
-                throw new InvalidArgumentException('Ungueltiger Topologieknoten.');
+                throw new InvalidArgumentException(_('Invalid topology node.'));
             }
             $mac = self::mac($vertex['mac'] ?? '');
             if (isset($nodes[$mac])) {
-                throw new InvalidArgumentException('Doppelte MAC-Adresse im Topologie-JSON.');
+                throw new InvalidArgumentException(_('Duplicate MAC address in topology JSON.'));
             }
             $nodes[$mac] = [
                 'mac' => $mac,
@@ -65,9 +65,10 @@ class Topology {
                 'type' => (string) ($vertex['type'] ?? 'UNKNOWN'),
                 'model' => (string) ($vertex['model'] ?? ''),
                 'wireless' => !empty($vertex['wifiRadios']),
+                'managed' => !empty($vertex['unifiDevice']),
                 'hostid' => null,
                 'host_name' => null,
-                'mapping' => 'Nicht zugeordnet',
+                'mapping' => _('Not mapped'),
                 'monitored' => false,
                 'maintenance' => false,
                 'problems' => []
@@ -78,7 +79,7 @@ class Topology {
         $missing = 0;
         foreach ($raw['edges'] as $edge) {
             if (!is_array($edge)) {
-                throw new InvalidArgumentException('Ungueltige Topologieverbindung.');
+                throw new InvalidArgumentException(_('Invalid topology link.'));
             }
             $up = self::mac($edge['uplinkMac'] ?? '');
             $down = self::mac($edge['downlinkMac'] ?? '');
@@ -105,7 +106,7 @@ class Topology {
     public function load(array $fields): array {
         $itemids = $fields['itemid'] ?? [];
         if (count($itemids) !== 1) {
-            throw new InvalidArgumentException('Bitte das Item UniFi topology: Raw JSON auswaehlen.');
+            throw new InvalidArgumentException(_('Select the UniFi topology: Raw JSON item.'));
         }
         $items = $this->result(API::Item()->get([
             'output' => ['itemid', 'hostid', 'value_type', 'key_', 'status', 'state'],
@@ -113,7 +114,7 @@ class Topology {
             'webitems' => true
         ]));
         if (count($items) !== 1 || (int) $items[0]['value_type'] !== ITEM_VALUE_TYPE_TEXT) {
-            throw new RuntimeException('Text-Item nicht vorhanden oder keine Leseberechtigung.');
+            throw new RuntimeException(_('Text item is unavailable or cannot be read.'));
         }
         $records = $this->result(API::History()->get([
             'output' => ['clock', 'value'],
@@ -124,11 +125,11 @@ class Topology {
             'limit' => 1
         ]));
         if (!$records) {
-            throw new RuntimeException('Noch keine Topologiedaten gespeichert.');
+            throw new RuntimeException(_('No topology data has been stored yet.'));
         }
         $raw = json_decode($records[0]['value'], true);
         if (!is_array($raw) || json_last_error() !== JSON_ERROR_NONE) {
-            throw new InvalidArgumentException('Topologie-JSON ungueltig oder abgeschnitten.');
+            throw new InvalidArgumentException(_('Topology JSON is invalid or truncated.'));
         }
         [$nodes, $edges, $missing] = self::normalize($raw);
         $warnings = [];
@@ -136,19 +137,19 @@ class Topology {
         $max_age = (int) ($fields['max_age'] ?? 300);
         $stale = $age > $max_age || $age < -60 || (int) $items[0]['status'] !== 0 || (int) $items[0]['state'] !== 0;
         if ($stale) {
-            $warnings[] = 'Topologiedaten veraltet, Zeitstempel unplausibel oder Quell-Item nicht aktiv/unterstuetzt. Verbindungen sind der letzte gespeicherte Stand.';
+            $warnings[] = _('Topology data is stale, its timestamp is implausible, or the source item is inactive or unsupported. Links show the last stored state.');
         }
         if (!empty($raw['has_unknown_switch'])) {
-            $warnings[] = 'UniFi meldet einen unbekannten Switch. Zwischenliegende Geraete koennen fehlen; Verbindungen sind keine Garantie fuer direkte Kabel.';
+            $warnings[] = _('UniFi reports an unknown switch. Intermediate devices may be missing, and links do not guarantee direct cabling.');
         }
         if ($missing) {
-            $warnings[] = $missing.' Verbindungen ohne vollstaendige Knoten wurden ausgelassen.';
+            $warnings[] = _s('%1$d links with incomplete nodes were omitted.', $missing);
         }
         $manual = ManualTopology::parse($fields['manual_nodes'] ?? '', $fields['manual_links'] ?? '');
         $bindings = self::parseBindings($fields['bindings'] ?? '') + ManualTopology::apply($nodes, $edges, $warnings, $manual);
         $pattern = $fields['host_pattern'] ?? '';
         if ($pattern !== '' && substr_count($pattern, '{name}') !== 1) {
-            throw new InvalidArgumentException('Namensmuster muss genau einmal {name} enthalten.');
+            throw new InvalidArgumentException(_('The name pattern must contain {name} exactly once.'));
         }
         $names = [];
         foreach ($nodes as $mac => $node) {
@@ -179,7 +180,9 @@ class Topology {
                 if (isset($hosts[$bindings[$mac]])) {
                     $candidates[] = $bindings[$mac];
                 }
-                $node['mapping'] = !empty($node['manual']) ? 'Manuelles Gerät mit expliziter Host-ID' : 'Explizite MAC/Host-ID-Zuordnung';
+                $node['mapping'] = !empty($node['manual'])
+                    ? _('Manual device with explicit host ID')
+                    : _('Explicit MAC/host ID mapping');
             }
             elseif (isset($names[$mac])) {
                 foreach ($hosts as $id => $host) {
@@ -187,7 +190,7 @@ class Topology {
                         $candidates[] = (string) $id;
                     }
                 }
-                $node['mapping'] = 'Exaktes Namensmuster';
+                $node['mapping'] = _('Exact name pattern');
             }
             if (count($candidates) === 1) {
                 $id = $candidates[0];
@@ -198,7 +201,9 @@ class Topology {
                 $host_nodes[$id][] = $mac;
             }
             else {
-                $node['mapping'] = count($candidates) > 1 ? 'Mehrdeutige Host-Zuordnung' : 'Kein lesbarer Host zugeordnet';
+                $node['mapping'] = count($candidates) > 1
+                    ? _('Ambiguous host mapping')
+                    : _('No readable host mapped');
             }
         }
         unset($node);
@@ -208,7 +213,7 @@ class Topology {
                 foreach ($macs as $mac) {
                     $nodes[$mac]['hostid'] = null;
                     $nodes[$mac]['monitored'] = false;
-                    $nodes[$mac]['mapping'] = 'Host mehrfach zugeordnet; Zuordnung korrigieren';
+                    $nodes[$mac]['mapping'] = _('Host is mapped more than once; correct the mapping');
                 }
                 unset($host_nodes[$id]);
             }
@@ -229,7 +234,7 @@ class Topology {
             }
             $problems = $this->result(API::Problem()->get($params));
             if (count($problems) > 2000) {
-                throw new RuntimeException('Mehr als 2000 offene Probleme; keine unvollstaendige Statusanzeige moeglich.');
+                throw new RuntimeException(_('More than 2000 open problems exist; an incomplete status cannot be displayed.'));
             }
             if ($problems) {
                 $triggers = $this->result(API::Trigger()->get([
@@ -244,7 +249,7 @@ class Topology {
                 foreach ($problems as $problem) {
                     $triggerid = (string) $problem['objectid'];
                     if (!isset($trigger_hosts[$triggerid])) {
-                        throw new RuntimeException('Problem konnte keinem lesbaren Trigger zugeordnet werden. Bitte erneut laden.');
+                        throw new RuntimeException(_('A problem could not be mapped to a readable trigger. Reload the widget.'));
                     }
                     foreach ($trigger_hosts[$triggerid] as $hostid) {
                         foreach ($host_nodes[$hostid] ?? [] as $mac) {
@@ -272,7 +277,7 @@ class Topology {
             $fields['time_period'] ?? ['from' => 'now-1h', 'to' => 'now']
         );
         if ($traffic_period['items'] === 0) {
-            $warnings[] = 'Keine Traffic-Items gefunden. Das aktualisierte UniFi-Template importieren und die Discovery abwarten.';
+            $warnings[] = _('No traffic items were found. Import the updated UniFi template and wait for discovery.');
         }
         return [
             'nodes' => array_values($nodes),
