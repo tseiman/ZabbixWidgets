@@ -198,7 +198,7 @@ class WidgetTrafficContractTest(unittest.TestCase):
         self.assertIn("dialog.showModal()", js)
         self.assertIn("dialog.ut-traffic-dialog", css)
         self.assertIn("::backdrop", css)
-        self.assertEqual(manifest["version"], "0.3.5")
+        self.assertEqual(manifest["version"], "0.3.6")
 
     def test_native_zabbix_svg_graph_drives_the_large_overlay_and_dashboard_time_zoom(self):
         js = (MODULE / "assets/js/class.widget.js").read_text()
@@ -210,7 +210,7 @@ class WidgetTrafficContractTest(unittest.TestCase):
         self.assertEqual(manifest["actions"]["widget.unifi_topology.traffic"]["layout"], "layout.json")
         self.assertEqual(manifest["widget"]["in"]["time_period"]["type"], "_timeperiod")
         self.assertIn({"type": "_timeperiod"}, manifest["widget"]["out"])
-        self.assertEqual(manifest["version"], "0.3.5")
+        self.assertEqual(manifest["version"], "0.3.6")
         self.assertIn("_loadTrafficGraph", js)
         self.assertIn("jQuery(svg).svggraph(this)", js)
         self.assertIn("hasBroadcast(CWidgetsData.DATA_TYPE_TIME_PERIOD)", js)
@@ -221,6 +221,8 @@ class WidgetTrafficContractTest(unittest.TestCase):
         self.assertIn("result.svg_options.data", js)
         self.assertIn("credentials: 'same-origin'", js)
         self.assertIn("selected === 'counter' ? 'counter' : 'auto'", js)
+        view = (MODULE / "views/widget.view.php").read_text()
+        self.assertIn("->setVar('traffic_graph', $data['traffic_graph'])", view)
         self.assertIn("traffic_graph", js)
         self.assertNotIn("ut-traffic-grid", js)
         self.assertIn(".ut-traffic-native", css)

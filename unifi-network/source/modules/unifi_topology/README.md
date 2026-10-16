@@ -1,10 +1,15 @@
 # UniFi Topology — Dashboard Widget for Zabbix 7.4
 
-Version 0.3.5 · native Zabbix Graph time selection, English/German UI, RX/TX history, and configurable manual devices and links
+Version 0.3.6 · native Zabbix Graph context fix, English/German UI, RX/TX history, and configurable manual devices and links
 
 The widget reads the `UniFi topology: Raw JSON` text item and renders the network devices. Zabbix history from traffic items discovered by the supplied template provides per-device RX/TX mini charts and an expandable dialog. Selecting the rest of a node opens its directly attached clients, network links, and Zabbix problems. The frontend does not create or modify maps, hosts, items, or triggers and does not contact UniFi directly.
 
-## Changes in 0.3.5
+## Changes in 0.3.6
+
+- Passes the server-generated native traffic graph context through the widget view to the browser so the expanded graph can load after installation or update.
+- No template change is required when updating from 0.3.5.
+
+## Changes retained from 0.3.5
 
 - Replaces the hand-drawn expanded traffic chart with Zabbix 7.4's native modern SVG Graph component (not Graph (classic)).
 - Supports horizontal drag selection in the expanded graph and applies the selected period to the complete dashboard through Zabbix's normal time-period feedback and broadcast path.
