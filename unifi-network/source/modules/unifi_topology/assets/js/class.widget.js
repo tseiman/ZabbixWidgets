@@ -190,7 +190,7 @@ class UniFiTopologyView {
     }
     _miniTraffic(node, point) {
         const period = this.data?.traffic_period;
-        if (!period) return null;
+        if (!period || node.manual === true) return null;
         const values = this._trafficPoints(node).map(point => Number(point[1])).filter(Number.isFinite);
         const maximum = this._niceMaximum(Math.max(1, ...values));
         const dimensions = {left: 2, top: 2, width: 68, height: 26};

@@ -2,7 +2,7 @@
 
 A read-only Zabbix 7.4 dashboard widget that visualizes a UniFi Network topology, links network devices to Zabbix hosts, overlays the current Zabbix problem severity, and shows per-device RX/TX traffic history. The accompanying template collects both topology and per-port device statistics from the UniFi controller.
 
-This directory contains **UniFi Topologie 0.3.1** and its **Zabbix 7.4** template. Version 0.3.1 keeps every mini chart bound to its own device, adds translucent green area fills, and makes UniFi warnings dismissible for the current dashboard page.
+This directory contains **UniFi Topologie 0.3.3** and its **Zabbix 7.4** template. Version 0.3.3 keeps every automatically discovered UniFi device's mini chart while omitting the chart control only for manually added topology nodes that have no UniFi traffic information.
 
 ## Contents
 
@@ -28,7 +28,7 @@ This directory contains **UniFi Topologie 0.3.1** and its **Zabbix 7.4** templat
 - Draws UniFi entries with `type=DEVICE` as network nodes.
 - Displays automatic wired and wireless connections from the UniFi topology response.
 - Shows port numbers, link rates, SSIDs, channels, and experience values when UniFi supplies them.
-- Shows a compact, individually bound RX/TX chart in the upper-right corner of every network node; nodes without history open an explicit empty state instead of fabricated values.
+- Shows a compact, individually bound RX/TX chart in the upper-right corner of every automatically discovered UniFi network node; nodes without history open an explicit empty state instead of fabricated values. Manually added topology nodes do not receive a traffic icon.
 - Opens an accessible, automatically scaled RX/TX chart dialog using the current dashboard time period.
 - Expands a selected device to show directly attached clients, network links, and open Zabbix problems.
 - Uses Zabbix's configured severity names and colors.

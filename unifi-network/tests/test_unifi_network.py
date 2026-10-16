@@ -172,13 +172,14 @@ class WidgetTrafficContractTest(unittest.TestCase):
         self.assertIn("unifi\\.device\\.(rx|tx)\\.(rate|counter)\\.bps", traffic)
         self.assertIn("MAX_POINTS", traffic)
 
-    def test_frontend_binds_one_svg_mini_chart_to_each_device(self):
+    def test_frontend_binds_svg_mini_charts_to_non_manual_devices_only(self):
         js = (MODULE / "assets/js/class.widget.js").read_text()
         css = (MODULE / "assets/css/widget.css").read_text()
         self.assertIn("this.svg('g'", js)
         self.assertIn("'data-traffic-mac': node.mac", js)
         self.assertIn("this._openTraffic(node, mini)", js)
         self.assertIn("if (traffic) svg.append(traffic)", js)
+        self.assertIn("if (!period || node.manual === true) return null", js)
         self.assertNotIn("this.svg('foreignObject'", js)
         self.assertNotIn("button.className = 'ut-traffic-mini'", js)
         self.assertIn("event.key === 'Enter' || event.key === ' '", js)
@@ -197,7 +198,7 @@ class WidgetTrafficContractTest(unittest.TestCase):
         self.assertIn("dialog.showModal()", js)
         self.assertIn("dialog.ut-traffic-dialog", css)
         self.assertIn("::backdrop", css)
-        self.assertEqual(manifest["version"], "0.3.1")
+        self.assertEqual(manifest["version"], "0.3.3")
 
     def test_unknown_switch_warning_is_dismissible_only_for_widget_lifetime(self):
         js = (MODULE / "assets/js/class.widget.js").read_text()

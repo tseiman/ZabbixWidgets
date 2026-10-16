@@ -1,8 +1,8 @@
 # UniFi Topologie – Dashboard-Widget für Zabbix 7.4
 
-Version 0.3.1 · Mit RX/TX-Verlauf, konfigurierbaren manuellen Geräten und Verbindungen
+Version 0.3.3 · Mit RX/TX-Verlauf, konfigurierbaren manuellen Geräten und Verbindungen
 
-Das Widget liest das Text-Item „UniFi topology: Raw JSON“ und zeichnet die Netzwerkgeräte. Die Zabbix-History der vom mitgelieferten Template entdeckten Traffic-Items liefert kleine RX/TX-Diagramme und einen vergrößerbaren Dialog. Ein Klick auf den übrigen Knoten öffnet dessen Endgeräte, Netzwerkverbindungen und Zabbix-Probleme. Das Frontend schreibt keine Maps, Hosts, Items oder Trigger und ruft UniFi nicht direkt ab.
+Das Widget liest das Text-Item „UniFi topology: Raw JSON“ und zeichnet die Netzwerkgeräte. Die Zabbix-History der vom mitgelieferten Template entdeckten Traffic-Items liefert kleine RX/TX-Diagramme und einen vergrößerbaren Dialog. Automatisch entdeckte UniFi-Geräte behalten ihr Traffic-Icon; ausschließlich manuell hinzugefügte Topologieknoten ohne UniFi-Trafficinformationen erhalten keines. Ein Klick auf den übrigen Knoten öffnet dessen Endgeräte, Netzwerkverbindungen und Zabbix-Probleme. Das Frontend schreibt keine Maps, Hosts, Items oder Trigger und ruft UniFi nicht direkt ab.
 
 ## Korrekturen in 0.3.1
 
